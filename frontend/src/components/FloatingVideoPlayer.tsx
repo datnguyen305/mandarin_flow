@@ -78,7 +78,14 @@ export function FloatingVideoPlayer() {
 
     playerRef.current = new window.YT.Player(playerHost, {
       videoId: pending.videoId,
-      playerVars: { start: Math.floor(pending.startTime), rel: 0, modestbranding: 1, playsinline: 1 },
+      playerVars: {
+        start: Math.floor(pending.startTime),
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        enablejsapi: 1,
+        origin: window.location.origin,
+      },
       width: "100%",
       height: "100%",
     });

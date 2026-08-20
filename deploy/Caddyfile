@@ -1,5 +1,6 @@
 {$PUBLIC_SITE_ADDRESS} {
   encode zstd gzip
+  header Referrer-Policy "strict-origin-when-cross-origin"
 
   reverse_proxy /api/* backend:8000
   reverse_proxy /health backend:8000
