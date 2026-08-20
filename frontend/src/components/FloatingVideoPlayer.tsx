@@ -180,17 +180,19 @@ export function FloatingVideoPlayer() {
   }, [dockedInWatch]);
 
   function close() {
+    playerRef.current?.pauseVideo();
     window.localStorage.setItem(FLOATING_VIDEO_HIDDEN_KEY, "1");
     setHidden(true);
   }
-
-  if (!visible) return null;
 
   const style = dockedInWatch && anchorStyle ? anchorStyle : FLOATING_STYLE;
 
   return (
     <aside
+      aria-hidden={!visible}
       className={`fixed z-40 overflow-hidden border border-cream-200 bg-black shadow-2xl transition-[left,top,width,height,bottom,right] duration-300 ${
+        visible ? "" : "invisible pointer-events-none"
+      } ${
         dockedInWatch ? "rounded-md" : "rounded-lg"
       }`}
       style={style}
