@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -11,7 +13,7 @@ class VocabularyRepository:
 
     async def save(
         self,
-        user_id: int,
+        guest_id: uuid.UUID,
         word: str,
         pinyin: str | None,
         meaning: str | None,
@@ -20,7 +22,7 @@ class VocabularyRepository:
         timestamp: float,
     ) -> SavedVocabulary:
         item = SavedVocabulary(
-            user_id=user_id,
+            guest_id=guest_id,
             word=word,
             pinyin=pinyin,
             meaning=meaning,
@@ -32,18 +34,18 @@ class VocabularyRepository:
         await self.db.flush()
         return item
 
-    async def list_for_user(self, user_id: int) -> list[SavedVocabulary]:
+    async def list_for_guest(self, guest_id: uuid.UUID) -> list[SavedVocabulary]:
         result = await self.db.execute(
             select(SavedVocabulary)
             .options(joinedload(SavedVocabulary.video), joinedload(SavedVocabulary.subtitle))
-            .where(SavedVocabulary.user_id == user_id)
+            .where(SavedVocabulary.guest_id == guest_id)
             .order_by(SavedVocabulary.created_at.desc())
         )
         return list(result.scalars().all())
 
-    async def delete_for_user(self, vocabulary_id: int, user_id: int) -> bool:
+    async def delete_for_guest(self, vocabulary_id: int, guest_id: uuid.UUID) -> bool:
         item = await self.db.get(SavedVocabulary, vocabulary_id)
-        if item is None or item.user_id != user_id:
+        if item is None or item.guest_id != guest_id:
             return False
         await self.db.delete(item)
         return True

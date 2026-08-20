@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { BookOpen, Loader2, Mail, MessageSquareText, Play, Search, Send, Sparkles } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { listVideos, listVocabulary } from "@/lib/api";
-import type { ImportedVideo, SavedVocabulary } from "@/types";
+import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
+import type { ImportedVideo, SavedVocabulary, VideoProgress } from "@/types";
 
 const FEEDBACK_EMAIL = process.env.NEXT_PUBLIC_FEEDBACK_EMAIL ?? "";
 
@@ -23,19 +23,29 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savedWordCounts, setSavedWordCounts] = useState<Record<string, number>>({});
+  const [videoProgress, setVideoProgress] = useState<Record<string, VideoProgress>>({});
   const [feedbackName, setFeedbackName] = useState("");
   const [feedbackContact, setFeedbackContact] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listVideos(), listVocabulary()])
-      .then(([videoItems, vocabularyItems]) => {
+    async function loadHomeData() {
+      try {
+        // The vocabulary request establishes the guest cookie before other guest-scoped calls run.
+        const [videoItems, vocabularyItems] = await Promise.all([listVideos(), listVocabulary()]);
+        const progressItems = await listVideoProgress();
         setVideos(videoItems);
         setSavedWordCounts(countSavedWordsByVideo(vocabularyItems));
-      })
-      .catch((exc) => setError(exc instanceof Error ? exc.message : "Không thể tải video."))
-      .finally(() => setLoading(false));
+        setVideoProgress(Object.fromEntries(progressItems.map((item) => [item.youtube_video_id, item])));
+      } catch (exc) {
+        setError(exc instanceof Error ? exc.message : "Không thể tải video.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadHomeData();
   }, []);
 
   const filteredVideos = useMemo(() => {
@@ -107,9 +117,12 @@ export default function HomePage() {
 
         {!loading && filteredVideos.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredVideos.map((video) => (
+            {filteredVideos.map((video) => {
+              const progress = videoProgress[video.youtube_video_id];
+              const watchHref = `/watch?v=${video.youtube_video_id}${progress?.current_time ? `&t=${Math.floor(progress.current_time)}` : ""}`;
+              return (
               <article className="overflow-hidden rounded-2xl border border-cream-200 bg-cream-50 shadow-sm transition hover:border-brand-200 hover:shadow-md" key={video.id}>
-                <Link href={`/watch?v=${video.youtube_video_id}`} className="block">
+                <Link href={watchHref} className="block">
                   <div className="relative aspect-video bg-slate-900">
                     {video.thumbnail_url ? (
                       <Image alt={video.title} className="object-cover" fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" src={video.thumbnail_url} />
@@ -122,7 +135,7 @@ export default function HomePage() {
                   </div>
                 </Link>
                 <div className="p-4">
-                  <Link className="line-clamp-2 min-h-11 font-semibold leading-snug text-slate-800 hover:text-brand-700" href={`/watch?v=${video.youtube_video_id}`}>
+                  <Link className="line-clamp-2 min-h-11 font-semibold leading-snug text-slate-800 hover:text-brand-700" href={watchHref}>
                     {video.title}
                   </Link>
                   <div className="mt-3 flex items-center gap-2 rounded-xl bg-cream-100 px-3 py-2 text-sm text-slate-700">
@@ -132,12 +145,13 @@ export default function HomePage() {
                     </span>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-                    <span>{formatImportedDate(video.created_at)}</span>
+                    <span>{progress?.current_time ? `Xem tiếp từ ${formatPlaybackTime(progress.current_time)}` : formatImportedDate(video.created_at)}</span>
                     <span className="rounded-full bg-brand-100 px-2 py-1 font-medium text-brand-800">{video.language}</span>
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -217,4 +231,10 @@ function countSavedWordsByVideo(items: SavedVocabulary[]): Record<string, number
     counts[item.youtube_video_id] = (counts[item.youtube_video_id] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function formatPlaybackTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }

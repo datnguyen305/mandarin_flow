@@ -205,7 +205,11 @@ Example process request:
 
 `SubtitleToken`: `id`, `subtitle_id`, `text`, `pinyin`, `meaning`, `start_index`, `end_index`
 
-`SavedVocabulary`: `id`, `user_id`, `word`, `pinyin`, `meaning`, `video_id`, `subtitle_id`, `timestamp`, `created_at`
+`GuestSession`: anonymous browser identity stored through a hashed HttpOnly cookie token.
+
+`SavedVocabulary`: `id`, `guest_id`, `word`, `pinyin`, `meaning`, `video_id`, `subtitle_id`, `timestamp`, `created_at`
+
+`GuestVideoProgress`: `guest_id`, `video_id`, `current_time`, `completed`, `last_watched_at`
 
 ## Provider Design
 
@@ -300,7 +304,8 @@ Covered areas include YouTube ID extraction, subtitle synchronization, Chinese s
 
 - YouTube subtitle availability depends on the target video.
 - Translation and dictionary quality are intentionally basic in the local provider.
-- Authentication is simplified to `user_id = 1`.
+- Users do not need accounts. Each browser receives a long-lived HttpOnly guest cookie; vocabulary and playback progress are isolated by guest.
+- Clearing cookies or changing browsers creates a new guest and does not restore the previous browser's learning data.
 - OpenAI ASR fallback is implemented, but long videos are capped by `ASR_MAX_DURATION_SECONDS`.
 
 ## Roadmap

@@ -28,6 +28,7 @@ services:
       context: ./backend
     restart: unless-stopped
     environment:
+      ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
       REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
@@ -44,7 +45,8 @@ services:
       SUBTITLE_BATCH_SECONDS: ${SUBTITLE_BATCH_SECONDS:-120}
       TRANSLATION_BATCH_SIZE: ${TRANSLATION_BATCH_SIZE:-30}
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-86400}
-      DEFAULT_USER_ID: ${DEFAULT_USER_ID:-1}
+      GUEST_COOKIE_NAME: ${GUEST_COOKIE_NAME:-mandarinflow_guest}
+      GUEST_SESSION_DAYS: ${GUEST_SESSION_DAYS:-365}
     volumes:
       - ./cookies:/app/cookies
     depends_on:

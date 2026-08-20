@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     openai_asr_model: str = "whisper-1"
     asr_max_duration_seconds: int = 1800
     yt_dlp_cookies_file: str | None = None
-    default_user_id: int = 1
+    guest_cookie_name: str = "mandarinflow_guest"
+    guest_session_days: int = 365
     dev_access_token: str | None = None
     cache_ttl_seconds: int = 86400
     subtitle_batch_seconds: int = 120

@@ -50,7 +50,7 @@ function WatchContent() {
     let cancelled = false;
 
     function openSubtitleStream() {
-      eventSource = new EventSource(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/subtitles/stream`);
+      eventSource = new EventSource(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}/subtitles/stream`, { withCredentials: true });
       eventSource.addEventListener("subtitle_batch", (event) => {
         const batch = JSON.parse((event as MessageEvent).data) as SubtitleBatch;
         setSubtitles((current) => mergeSubtitleBatch(current, batch));

@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from app.services.vocabulary_service import VocabularyService
@@ -29,6 +31,7 @@ class FakeSavedItem:
     created_at = "2026-08-18T00:00:00"
     video = FakeVideo()
     subtitle = FakeSubtitle()
+    guest_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
 
 
 class FakeVocabularyRepository:
@@ -38,8 +41,11 @@ class FakeVocabularyRepository:
     async def save(self, *args) -> FakeSavedItem:
         return FakeSavedItem()
 
-    async def list_for_user(self, user_id: int) -> list[FakeSavedItem]:
-        return [FakeSavedItem()]
+    async def list_for_guest(self, guest_id: uuid.UUID) -> list[FakeSavedItem]:
+        return [FakeSavedItem()] if guest_id == FakeSavedItem.guest_id else []
+
+    async def delete_for_guest(self, vocabulary_id: int, guest_id: uuid.UUID) -> bool:
+        return vocabulary_id == FakeSavedItem.id and guest_id == FakeSavedItem.guest_id
 
 
 @pytest.mark.asyncio
@@ -47,10 +53,23 @@ async def test_save_and_retrieve_vocabulary() -> None:
     service = VocabularyService(FakeDb())  # type: ignore[arg-type]
     service.repo = FakeVocabularyRepository()  # type: ignore[assignment]
 
-    saved_id = await service.save(1, "医院", "yīyuàn", "bệnh viện", "abc123abc12", 20, 12.5)
-    items = await service.list_for_user(1)
+    guest_id = FakeSavedItem.guest_id
+    saved_id = await service.save(guest_id, "医院", "yīyuàn", "bệnh viện", "abc123abc12", 20, 12.5)
+    items = await service.list_for_guest(guest_id)
 
     assert saved_id > 0
     assert len(items) == 1
     assert items[0].word == "医院"
     assert items[0].subtitle_sentence == "我在医院工作"
+
+
+@pytest.mark.asyncio
+async def test_guest_cannot_delete_another_guests_vocabulary() -> None:
+    service = VocabularyService(FakeDb())  # type: ignore[arg-type]
+    service.repo = FakeVocabularyRepository()  # type: ignore[assignment]
+
+    another_guest = uuid.UUID("22222222-2222-2222-2222-222222222222")
+
+    assert await service.list_for_guest(another_guest) == []
+    assert await service.delete_for_guest(FakeSavedItem.id, another_guest) is False
+    assert await service.delete_for_guest(FakeSavedItem.id, FakeSavedItem.guest_id) is True

@@ -11,8 +11,7 @@ const THEME_EVENT = "pastel-theme-updated";
 const navItems = [
   { href: "/", label: "Trang chủ", icon: Home },
   { href: "/", label: "Video", icon: Library, watchOnly: true },
-  { href: "/vocabulary", label: "Từ vựng", icon: BookOpen },
-  { href: "/dev", label: "Dev", icon: KeyRound }
+  { href: "/vocabulary", label: "Từ vựng", icon: BookOpen }
 ];
 
 const themes = [
@@ -71,21 +70,35 @@ export function AppHeader() {
           })}
         </div>
 
-        <div className="inline-flex items-center gap-2 rounded-xl border border-cream-200 bg-cream-100/80 px-2.5 py-2 shadow-sm">
-          <Palette size={16} className="text-brand-800" />
-          <div className="flex items-center gap-1.5">
-            {themes.map((item) => (
-              <button
-                aria-label={`Chọn màu ${item.label}`}
-                className={`h-6 w-6 rounded-full border transition hover:scale-105 ${theme === item.id ? "border-brand-800 ring-2 ring-brand-200" : "border-cream-300"}`}
-                key={item.id}
-                onClick={() => handleThemeChange(item.id)}
-                style={{ backgroundColor: item.color }}
-                title={item.label}
-                type="button"
-              />
-            ))}
+        <div className="inline-flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-xl border border-cream-200 bg-cream-100/80 px-2.5 py-2 shadow-sm">
+            <Palette size={16} className="text-brand-800" />
+            <div className="flex items-center gap-1.5">
+              {themes.map((item) => (
+                <button
+                  aria-label={`Chọn màu ${item.label}`}
+                  className={`h-6 w-6 rounded-full border transition hover:scale-105 ${theme === item.id ? "border-brand-800 ring-2 ring-brand-200" : "border-cream-300"}`}
+                  key={item.id}
+                  onClick={() => handleThemeChange(item.id)}
+                  style={{ backgroundColor: item.color }}
+                  title={item.label}
+                  type="button"
+                />
+              ))}
+            </div>
           </div>
+          <Link
+            aria-label="Mở công cụ Dev"
+            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-sm transition ${
+              pathname.startsWith("/dev")
+                ? "border-brand-300 bg-brand-700 text-cream-50"
+                : "border-cream-200 bg-cream-100/80 text-brand-800 hover:bg-cream-200"
+            }`}
+            href="/dev"
+            title="Dev"
+          >
+            <KeyRound size={18} />
+          </Link>
         </div>
       </nav>
     </header>

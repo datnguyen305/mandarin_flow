@@ -56,7 +56,7 @@ export function ImportProcessingMonitor() {
     if (eventSourceRef.current && eventSourceVideoRef.current === taskVideoId) return;
 
     eventSourceRef.current?.close();
-    const eventSource = new EventSource(`${API_BASE_URL}/api/videos/${encodeURIComponent(taskVideoId)}/subtitles/stream`);
+    const eventSource = new EventSource(`${API_BASE_URL}/api/videos/${encodeURIComponent(taskVideoId)}/subtitles/stream`, { withCredentials: true });
     eventSourceRef.current = eventSource;
     eventSourceVideoRef.current = taskVideoId;
 

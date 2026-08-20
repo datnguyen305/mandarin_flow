@@ -36,5 +36,12 @@ class PlaybackPositionRequest(BaseModel):
     current_time: float
 
 
+class VideoProgressResponse(BaseModel):
+    youtube_video_id: str
+    current_time: float
+    completed: bool
+    last_watched_at: datetime
+
+
 class CookiesUploadRequest(BaseModel):
     content: str

@@ -25,6 +25,19 @@ Primary user flow:
 4. Watch page shows YouTube player, interactive subtitles, word list, transcript, dictionary lookup, and save-to-vocabulary.
 5. Vocabulary page `/vocabulary` shows saved words.
 
+## Anonymous Guest Data
+
+- Users do not log in. `get_or_create_guest()` creates a random token and sends it as the HttpOnly `mandarinflow_guest` cookie.
+- PostgreSQL stores only the SHA-256 token hash in `guest_sessions`; raw tokens never enter the database.
+- `saved_vocabulary.guest_id` isolates vocabulary by browser guest.
+- `guest_video_progress` stores a separate playback position for each guest/video pair.
+- The home page resumes a video from the current guest's saved position.
+- Video, subtitles, dictionary data, and dictionary cache remain shared globally.
+- Dev access still uses `X-Dev-Token`; it is separate from guest identity.
+- Migration `0003_guest_sessions` preserves old `user_id=1` vocabulary under an inaccessible legacy guest instead of deleting it.
+- Production Compose sets `ENVIRONMENT=production`, making the guest cookie `Secure`; frontend requests use `credentials: "include"`.
+- Clearing cookies, private browsing, or switching browsers creates a different guest. There is no cross-device recovery in this MVP.
+
 ## Current Docker State
 
 The app is expected to run with:
@@ -215,9 +228,9 @@ docker compose logs --tail=120 backend
 
 Recent passing checks:
 
-- Backend `pytest`: 27 passed
+- Backend `pytest`: 44 passed
 - Frontend `npm run lint`: passed
-- Frontend `npm test`: 5 passed
+- Frontend `npm test`: 10 passed
 - Frontend `npm run build`: passed
 - Frontend container was rebuilt/restarted after the latest sidebar tab order and watch title cleanup changes.
 

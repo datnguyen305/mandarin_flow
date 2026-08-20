@@ -51,6 +51,13 @@ export interface ImportedVideo {
   created_at: string;
 }
 
+export interface VideoProgress {
+  youtube_video_id: string;
+  current_time: number;
+  completed: boolean;
+  last_watched_at: string;
+}
+
 export interface DictionaryMeaning {
   meaning: string;
   definition?: string | null;

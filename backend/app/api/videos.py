@@ -6,15 +6,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import build_subtitle_service
-from app.core.auth import has_dev_access, require_dev_access
+from app.core.auth import get_or_create_guest, has_dev_access, require_dev_access
 from app.core.config import settings
 from app.core.errors import SubtitlesUnavailableError
 from app.db.redis import RedisCache, get_cache
 from app.db.session import AsyncSessionLocal
 from app.db.session import get_db
-from app.schemas.video import CookiesUploadRequest, PlaybackPositionRequest, ProcessVideoRequest, ProcessVideoResponse, VideoResponse
+from app.models import GuestSession
+from app.schemas.video import CookiesUploadRequest, PlaybackPositionRequest, ProcessVideoRequest, ProcessVideoResponse, VideoProgressResponse, VideoResponse
 from app.services.subtitle_queue import format_sse, subtitle_event_broker, subtitle_processing_queue
 from app.services.video_service import VideoService
+from app.services.video_progress_service import VideoProgressService
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -41,6 +43,14 @@ async def list_videos(
 ) -> list[VideoResponse]:
     videos = await VideoService(db).list_recent(limit, include_unpublished=include_unpublished)
     return [VideoResponse.model_validate(video) for video in videos]
+
+
+@router.get("/progress", response_model=list[VideoProgressResponse])
+async def list_video_progress(
+    db: AsyncSession = Depends(get_db),
+    guest: GuestSession = Depends(get_or_create_guest),
+) -> list[VideoProgressResponse]:
+    return await VideoProgressService(db).list_for_guest(guest.id)
 
 
 @router.post("/cookies", status_code=status.HTTP_202_ACCEPTED)
@@ -116,7 +126,13 @@ async def stream_video_subtitles(video_id: str) -> StreamingResponse:
 
 
 @router.post("/{video_id}/playback-position", status_code=status.HTTP_202_ACCEPTED)
-async def update_playback_position(video_id: str, payload: PlaybackPositionRequest) -> dict[str, str]:
+async def update_playback_position(
+    video_id: str,
+    payload: PlaybackPositionRequest,
+    db: AsyncSession = Depends(get_db),
+    guest: GuestSession = Depends(get_or_create_guest),
+) -> dict[str, str]:
+    await VideoProgressService(db).update(guest.id, video_id, payload.current_time)
     await subtitle_processing_queue.prioritize_batch(video_id, payload.current_time)
     return {"status": "accepted"}
 

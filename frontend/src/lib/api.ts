@@ -1,4 +1,4 @@
-import type { DictionaryEntry, ImportedVideo, ProcessingProgress, SavedVocabulary, SubtitleResponse } from "@/types";
+import type { DictionaryEntry, ImportedVideo, ProcessingProgress, SavedVocabulary, SubtitleResponse, VideoProgress } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 export { API_BASE_URL };
@@ -10,6 +10,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       "Content-Type": "application/json",
       ...(options?.headers ?? {})
     },
+    credentials: "include",
     cache: "no-store"
   });
   if (!response.ok) {
@@ -51,10 +52,15 @@ export async function listVideos(limit = 50, devToken?: string | null): Promise<
   return request(`/api/videos?limit=${limit}`, { headers: devHeaders(devToken) });
 }
 
+export async function listVideoProgress(): Promise<VideoProgress[]> {
+  return request("/api/videos/progress");
+}
+
 export async function deleteVideo(videoId: string, devToken?: string | null): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/videos/${encodeURIComponent(videoId)}`, {
     method: "DELETE",
     headers: devHeaders(devToken),
+    credentials: "include",
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -94,5 +100,9 @@ export async function listVocabulary(): Promise<SavedVocabulary[]> {
 }
 
 export async function deleteVocabulary(id: number): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/vocabulary/${id}`, { method: "DELETE" });
+  const response = await fetch(`${API_BASE_URL}/api/vocabulary/${id}`, { method: "DELETE", credentials: "include" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message ?? `Request failed with ${response.status}`);
+  }
 }

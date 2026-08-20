@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
+import uuid
+
+from sqlalchemy import DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -10,7 +12,7 @@ class SavedVocabulary(Base):
     __tablename__ = "saved_vocabulary"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    guest_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("guest_sessions.id", ondelete="CASCADE"), index=True)
     word: Mapped[str] = mapped_column(String(128))
     pinyin: Mapped[str | None] = mapped_column(String(256), nullable=True)
     meaning: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -21,3 +23,4 @@ class SavedVocabulary(Base):
 
     video = relationship("Video")
     subtitle = relationship("Subtitle")
+    guest = relationship("GuestSession", back_populates="vocabulary")
