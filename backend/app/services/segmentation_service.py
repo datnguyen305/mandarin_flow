@@ -1,3 +1,4 @@
+import unicodedata
 from abc import ABC, abstractmethod
 
 
@@ -18,7 +19,10 @@ class JiebaSegmentationProvider(SegmentationProvider):
         self._known_words = ["今天", "医院", "工作", "学习", "中文", "中国", "老师", "学生", "朋友", "喜欢"]
 
     def segment(self, text: str) -> list[str]:
-        clean_text = "".join(ch for ch in text.strip() if not ch.isspace())
+        clean_text = "".join(
+            ch for ch in text.strip()
+            if not ch.isspace() and not unicodedata.category(ch).startswith("P")
+        )
         if not clean_text:
             return []
         if self._jieba is not None:
