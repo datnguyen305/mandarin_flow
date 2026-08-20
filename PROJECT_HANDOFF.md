@@ -46,6 +46,8 @@ The app is expected to run with:
 docker compose up --build -d
 ```
 
+Production deployment is image-based: `.github/workflows/deploy.yml` builds backend/frontend, pushes SHA and `latest` tags to GHCR, then pulls the exact SHA on the VPS. `docker-compose.prod.yml` does not build application images on the VPS.
+
 URLs:
 
 ```text

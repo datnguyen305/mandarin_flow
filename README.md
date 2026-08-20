@@ -124,10 +124,12 @@ POSTGRES_PASSWORD=use-a-strong-password
 DEV_ACCESS_TOKEN=use-a-strong-dev-token
 ```
 
-Start production:
+Log in to GHCR once on the VPS, then start production from the published images:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+echo "YOUR_GHCR_READ_TOKEN" | docker login ghcr.io -u datnguyen305 --password-stdin
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --no-build
 ```
 
 Check status:
@@ -161,10 +163,47 @@ FRONTEND_URL=https://your-domain.com
 NEXT_PUBLIC_API_BASE_URL=https://your-domain.com
 ```
 
-Then rebuild so Next.js receives the public API URL:
+The frontend public API URL is compiled by GitHub Actions. Deploy the latest published images with:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull backend frontend
+docker compose -f docker-compose.prod.yml up -d --no-build
+```
+
+## GitHub Actions Deployment
+
+`.github/workflows/deploy.yml` runs on every push to `main`:
+
+1. Build backend and frontend images.
+2. Push both the commit SHA and `latest` tags to GHCR.
+3. SSH to the VPS.
+4. Pull the exact commit SHA images.
+5. Run `docker compose up -d --no-build` and verify `/health`.
+
+Configure these repository or `production` environment secrets in GitHub:
+
+```text
+VPS_HOST          VPS IP or hostname
+VPS_PORT          SSH port, for example 22
+VPS_USER          root
+VPS_SSH_KEY       complete private SSH key
+GHCR_USERNAME     datnguyen305
+GHCR_TOKEN        classic PAT with read:packages
+```
+
+Configure this repository variable because it is public and compiled into the frontend image:
+
+```text
+NEXT_PUBLIC_FEEDBACK_EMAIL=your-public-email@example.com
+```
+
+The VPS must already contain `/root/mandarin_flow/.env`. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image.
+
+To roll back, use a previously successful commit SHA:
+
+```bash
+IMAGE_TAG=PREVIOUS_COMMIT_SHA docker compose -f docker-compose.prod.yml pull backend frontend
+IMAGE_TAG=PREVIOUS_COMMIT_SHA docker compose -f docker-compose.prod.yml up -d --no-build
 ```
 
 ## API Overview

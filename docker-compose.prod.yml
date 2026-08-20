@@ -24,8 +24,7 @@ services:
       retries: 10
 
   backend:
-    build:
-      context: ./backend
+    image: ghcr.io/datnguyen305/mandarin-flow-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       ENVIRONMENT: production
@@ -56,11 +55,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
-        NEXT_PUBLIC_FEEDBACK_EMAIL: ${NEXT_PUBLIC_FEEDBACK_EMAIL:-}
+    image: ghcr.io/datnguyen305/mandarin-flow-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
