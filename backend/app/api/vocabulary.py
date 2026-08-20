@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_or_create_guest
@@ -40,11 +40,8 @@ async def list_vocabulary(
 @router.delete("/{vocabulary_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_vocabulary(
     vocabulary_id: int,
-    response: Response,
     db: AsyncSession = Depends(get_db),
     guest: GuestSession = Depends(get_or_create_guest),
-) -> Response:
-    deleted = await VocabularyService(db).delete_for_guest(vocabulary_id, guest.id)
-    if not deleted:
-        response.status_code = status.HTTP_404_NOT_FOUND
-    return response
+) -> None:
+    # Deletion is intentionally idempotent so stale guest lists do not surface a false error.
+    await VocabularyService(db).delete_for_guest(vocabulary_id, guest.id)
