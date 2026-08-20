@@ -1,0 +1,16 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+SQLAlchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+redis==5.2.1
+httpx==0.28.1
+youtube-transcript-api==0.6.3
+yt-dlp[default]==2026.7.4
+jieba==0.42.1
+pypinyin==0.53.0
+pytest==8.3.4
+pytest-asyncio==0.25.2
+aiosqlite==0.20.0

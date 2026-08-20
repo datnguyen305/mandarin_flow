@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv/
+.env
+cookies/*
+!cookies/.gitkeep
+dist/
+coverage/
+.DS_Store
+*.dump.sql
+mandarinflow*.sql

@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-youtube_language_learning}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-youtube_language_learning}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      TRANSLATION_PROVIDER: ${TRANSLATION_PROVIDER:-local}
+      DICTIONARY_PROVIDER: ${DICTIONARY_PROVIDER:-cvdict}
+      CVDICT_PATH: ${CVDICT_PATH:-app/data/CVDICT.u8}
+      ASR_PROVIDER: ${ASR_PROVIDER:-disabled}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TRANSLATION_MODEL: ${OPENAI_TRANSLATION_MODEL:-gpt-4o-mini}
+      OPENAI_ASR_MODEL: ${OPENAI_ASR_MODEL:-whisper-1}
+      ASR_MAX_DURATION_SECONDS: ${ASR_MAX_DURATION_SECONDS:-1800}
+      DEV_ACCESS_TOKEN: ${DEV_ACCESS_TOKEN:?DEV_ACCESS_TOKEN is required}
+      YT_DLP_COOKIES_FILE: ${YT_DLP_COOKIES_FILE:-/app/cookies/cookies.txt}
+      SUBTITLE_BATCH_SECONDS: ${SUBTITLE_BATCH_SECONDS:-120}
+      TRANSLATION_BATCH_SIZE: ${TRANSLATION_BATCH_SIZE:-30}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-86400}
+      DEFAULT_USER_ID: ${DEFAULT_USER_ID:-1}
+    volumes:
+      - ./cookies:/app/cookies
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
+        NEXT_PUBLIC_FEEDBACK_EMAIL: ${NEXT_PUBLIC_FEEDBACK_EMAIL:-}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
+      NEXT_PUBLIC_FEEDBACK_EMAIL: ${NEXT_PUBLIC_FEEDBACK_EMAIL:-}
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_SITE_ADDRESS: ${PUBLIC_SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
