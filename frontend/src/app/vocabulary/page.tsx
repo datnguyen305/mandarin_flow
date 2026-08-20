@@ -15,6 +15,7 @@ export default function VocabularyPage() {
   const [detailsById, setDetailsById] = useState<Record<number, DictionaryEntry | undefined>>({});
   const [detailsLoadingById, setDetailsLoadingById] = useState<Record<number, boolean>>({});
   const [detailsErrorById, setDetailsErrorById] = useState<Record<number, string | undefined>>({});
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     listVocabulary()
@@ -24,8 +25,25 @@ export default function VocabularyPage() {
   }, []);
 
   async function handleDelete(id: number) {
-    await deleteVocabulary(id);
+    const removedItem = items.find((item) => item.id === id);
+    if (!removedItem || deletingId !== null) return;
+
+    setError(null);
     setItems((current) => current.filter((item) => item.id !== id));
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    setDeletingId(id);
+    try {
+      await deleteVocabulary(id);
+    } catch (exc) {
+      setItems((current) => [removedItem, ...current]);
+      setError(exc instanceof Error ? exc.message : "Không thể xóa từ vựng.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function toggleDetails(item: SavedVocabulary) {
@@ -117,7 +135,7 @@ export default function VocabularyPage() {
                           Chi tiết
                           <ChevronDown className={`transition-transform ${expanded ? "rotate-180" : ""}`} size={15} />
                         </button>
-                        <button aria-label="Delete word" className="rounded-md p-2 text-slate-500 hover:bg-cream-200" onClick={() => handleDelete(item.id)}>
+                        <button aria-label="Delete word" className="rounded-md p-2 text-slate-500 hover:bg-cream-200 disabled:cursor-not-allowed disabled:opacity-50" disabled={deletingId !== null} onClick={() => handleDelete(item.id)} type="button">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -157,7 +175,7 @@ export default function VocabularyPage() {
                   <h2 className="font-serif text-3xl font-bold text-ink">{item.word}</h2>
                   <p className="mt-1 font-mono text-brand-700">{item.pinyin}</p>
                 </div>
-                <button aria-label="Delete word" className="rounded-md p-2 text-slate-500 hover:bg-cream-200" onClick={() => handleDelete(item.id)}>
+                <button aria-label="Delete word" className="rounded-md p-2 text-slate-500 hover:bg-cream-200 disabled:cursor-not-allowed disabled:opacity-50" disabled={deletingId !== null} onClick={() => handleDelete(item.id)} type="button">
                   <Trash2 size={16} />
                 </button>
               </div>
