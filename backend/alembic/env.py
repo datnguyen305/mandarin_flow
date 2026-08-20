@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
 from app.db.base import Base
-from app.models import subtitle, subtitle_token, video, vocabulary
+from app.models import dictionary_enrichment, guest, guest_video_progress, subtitle, subtitle_token, video, vocabulary
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

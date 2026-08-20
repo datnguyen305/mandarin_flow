@@ -265,9 +265,16 @@ class DictionaryProvider:
     async def lookup(self, word: str, context: str | None = None): ...
 ```
 
-The MVP ships with local/mock providers so the application runs without API keys. Redis caches processed subtitles, dictionary lookup results, and translation batches, but PostgreSQL remains the source of truth.
+The MVP ships with local/mock providers so the application runs without API keys. Redis caches processed subtitles, dictionary lookup results, translation batches, and contextual dictionary enrichment, while PostgreSQL remains the source of truth.
 
 Dictionary lookup defaults to `DICTIONARY_PROVIDER=cvdict`, backed by `backend/app/data/CVDICT.u8`. CVDICT is a Chinese-Vietnamese dictionary by Phong Phan, based on CC-CEDICT, and is distributed under the Creative Commons Attribution-ShareAlike 4.0 International License. If CVDICT does not contain a word, the app falls back to the small local provider.
+
+Contextual dictionary enrichment uses a two-level cache:
+
+- Redis is checked first for fast responses and expires according to `CACHE_TTL_SECONDS` (24 hours by default).
+- PostgreSQL stores enrichment permanently in `dictionary_enrichment_cache`, keyed by word, context hash, source language, and target language.
+- If Redis misses but PostgreSQL has the entry, the backend restores Redis and returns the stored enrichment without calling OpenAI.
+- OpenAI is called only when both caches miss. Redis or PostgreSQL failures fall back gracefully to the dictionary result.
 
 ```env
 DICTIONARY_PROVIDER=cvdict

@@ -8,9 +8,13 @@ from pathlib import Path
 
 import httpx
 from pydantic import ValidationError
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.redis import RedisCache
+from app.models import DictionaryEnrichmentCache
 from app.schemas.dictionary import DictionaryCollocation, DictionaryContext, DictionaryEnrichment, DictionaryEntry, DictionaryExample, DictionaryMeaning
 
 logger = logging.getLogger(__name__)
@@ -214,14 +218,17 @@ class LearningDictionaryProvider(DictionaryProvider):
         basic_provider: DictionaryProvider,
         enrichment_provider: DictionaryEnrichmentProvider,
         cache: RedisCache,
+        db: AsyncSession | None = None,
         source_language: str = "zh",
         target_language: str = "vi",
     ) -> None:
         self.basic_provider = basic_provider
         self.enrichment_provider = enrichment_provider
         self.cache = cache
+        self.db = db
         self.source_language = source_language
         self.target_language = target_language
+        self.model = getattr(enrichment_provider, "model", enrichment_provider.__class__.__name__)
 
     async def lookup(self, word: str, context: str | None = None) -> DictionaryEntry:
         entry = await self.basic_provider.lookup(word, None)
@@ -233,16 +240,37 @@ class LearningDictionaryProvider(DictionaryProvider):
         if cached:
             return apply_enrichment(entry, DictionaryEnrichment.model_validate_json(cached), context)
 
+        persisted = await safe_db_get_enrichment(
+            self.db,
+            word,
+            context_hash(word, context),
+            self.source_language,
+            self.target_language,
+        )
+        if persisted is not None:
+            await safe_cache_set(self.cache, context_key, persisted.model_dump_json())
+            return apply_enrichment(entry, persisted, context)
+
         try:
             enrichment = await self.enrichment_provider.enrich(entry, context, self.source_language, self.target_language)
             await safe_cache_set(self.cache, context_key, enrichment.model_dump_json())
+            await safe_db_set_enrichment(
+                self.db,
+                word,
+                context,
+                context_hash(word, context),
+                self.source_language,
+                self.target_language,
+                self.model,
+                enrichment,
+            )
             return apply_enrichment(entry, enrichment, context)
         except Exception as exc:
             logger.warning("Dictionary enrichment failed for %s: %s", word, exc)
             return entry.model_copy(update={"enrichment_error": "Không thể tải thêm giải thích."})
 
 
-def build_dictionary_provider(cache: RedisCache, enrich: bool = False) -> DictionaryProvider:
+def build_dictionary_provider(cache: RedisCache, enrich: bool = False, db: AsyncSession | None = None) -> DictionaryProvider:
     provider_name = settings.dictionary_provider.lower()
     if provider_name == "cvdict":
         provider: DictionaryProvider = CVDictDictionaryProvider()
@@ -256,6 +284,7 @@ def build_dictionary_provider(cache: RedisCache, enrich: bool = False) -> Dictio
         basic_provider,
         enrichment_provider=OpenAIDictionaryEnrichmentProvider(),
         cache=cache,
+        db=db,
     )
 
 
@@ -522,6 +551,75 @@ async def safe_cache_set(cache: RedisCache, key: str, value: str) -> None:
         await cache.set(key, value)
     except Exception as exc:
         logger.warning("Dictionary cache set failed for %s: %s", key, exc)
+
+
+async def safe_db_get_enrichment(
+    db: AsyncSession | None,
+    word: str,
+    lookup_context_hash: str,
+    source_language: str,
+    target_language: str,
+) -> DictionaryEnrichment | None:
+    if db is None:
+        return None
+    try:
+        result = await db.execute(
+            select(DictionaryEnrichmentCache).where(
+                DictionaryEnrichmentCache.word == word,
+                DictionaryEnrichmentCache.context_hash == lookup_context_hash,
+                DictionaryEnrichmentCache.source_language == source_language,
+                DictionaryEnrichmentCache.target_language == target_language,
+            )
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            return None
+        return DictionaryEnrichment.model_validate(record.enrichment_json)
+    except (ValidationError, ValueError) as exc:
+        logger.warning("Dictionary SQL enrichment is invalid for %s: %s", word, exc)
+        return None
+    except Exception as exc:
+        await db.rollback()
+        logger.warning("Dictionary SQL cache get failed for %s: %s", word, exc)
+        return None
+
+
+async def safe_db_set_enrichment(
+    db: AsyncSession | None,
+    word: str,
+    context: str,
+    lookup_context_hash: str,
+    source_language: str,
+    target_language: str,
+    model: str,
+    enrichment: DictionaryEnrichment,
+) -> None:
+    if db is None:
+        return
+    try:
+        statement = insert(DictionaryEnrichmentCache).values(
+            word=word,
+            context_hash=lookup_context_hash,
+            context=re.sub(r"\s+", " ", context).strip()[:4000],
+            source_language=source_language,
+            target_language=target_language,
+            model=model,
+            enrichment_json=enrichment.model_dump(mode="json"),
+        )
+        statement = statement.on_conflict_do_update(
+            constraint="uq_dictionary_enrichment_lookup",
+            set_={
+                "context": statement.excluded.context,
+                "model": statement.excluded.model,
+                "enrichment_json": statement.excluded.enrichment_json,
+                "updated_at": func.now(),
+            },
+        )
+        await db.execute(statement)
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.warning("Dictionary SQL cache set failed for %s: %s", word, exc)
 
 
 def format_headword_pinyin(word: str, pinyin: str | None) -> str | None:

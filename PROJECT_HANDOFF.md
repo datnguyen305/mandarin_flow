@@ -33,6 +33,7 @@ Primary user flow:
 - `guest_video_progress` stores a separate playback position for each guest/video pair.
 - The home page resumes a video from the current guest's saved position.
 - Video, subtitles, dictionary data, and dictionary cache remain shared globally.
+- Dictionary enrichment uses Redis as a fast TTL cache and PostgreSQL table `dictionary_enrichment_cache` as the persistent cache. Lookup order is Redis -> PostgreSQL -> OpenAI/fallback provider.
 - Dev access still uses `X-Dev-Token`; it is separate from guest identity.
 - Migration `0003_guest_sessions` preserves old `user_id=1` vocabulary under an inaccessible legacy guest instead of deleting it.
 - Production Compose sets `ENVIRONMENT=production`, making the guest cookie `Secure`; frontend requests use `credentials: "include"`.
