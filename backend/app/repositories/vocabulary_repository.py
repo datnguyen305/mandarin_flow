@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -44,11 +44,13 @@ class VocabularyRepository:
         return list(result.scalars().all())
 
     async def delete_for_guest(self, vocabulary_id: int, guest_id: uuid.UUID) -> bool:
-        item = await self.db.get(SavedVocabulary, vocabulary_id)
-        if item is None or item.guest_id != guest_id:
-            return False
-        await self.db.delete(item)
-        return True
+        result = await self.db.execute(
+            delete(SavedVocabulary).where(
+                SavedVocabulary.id == vocabulary_id,
+                SavedVocabulary.guest_id == guest_id,
+            )
+        )
+        return bool(result.rowcount)
 
     async def find_video_and_subtitle(self, youtube_video_id: str, subtitle_id: int) -> tuple[Video | None, Subtitle | None]:
         video_result = await self.db.execute(select(Video).where(Video.youtube_video_id == youtube_video_id))
