@@ -150,7 +150,7 @@ export function ImportProcessingMonitor() {
             <span className="truncate">{task.message}</span>
           </div>
           <p className="mt-1 truncate text-xs text-slate-500">
-            {task.progress.processed_batches}/{task.progress.total_batches || 0} batch - {task.progress.processed_subtitles}/{task.progress.total_subtitles || 0} dòng phụ đề
+            {task.progress.processed_batches}/{task.progress.total_batches || 0} batch
           </p>
         </div>
         {(isCompleted || isFailed) && (

@@ -193,7 +193,7 @@ export default function DevPage() {
   const progressPercent = Math.max(0, Math.min(100, Math.round((progress?.progress ?? (loading ? 0.08 : 0)) * 100)));
   const activeStepIndex = stepIndexForProgress(progress, loading);
   const progressLabel = progress
-    ? `${progress.processed_batches}/${progress.total_batches || 0} batch - ${progress.processed_subtitles}/${progress.total_subtitles || 0} dòng phụ đề`
+    ? `${progress.processed_batches}/${progress.total_batches || 0} batch`
     : loading
       ? "Đang chuẩn bị dữ liệu xử lý"
       : "Chưa bắt đầu";
