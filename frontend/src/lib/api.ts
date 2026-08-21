@@ -11,8 +11,7 @@ function resolveApiBaseUrl(configuredUrl: string): string {
   const pageHostname = window.location.hostname;
   const localHostnames = new Set(["localhost", "127.0.0.1"]);
   if (localHostnames.has(apiUrl.hostname) && localHostnames.has(pageHostname)) {
-    apiUrl.hostname = pageHostname;
-    return apiUrl.toString().replace(/\/$/, "");
+    return "";
   }
 
   return configuredUrl.replace(/\/$/, "");
