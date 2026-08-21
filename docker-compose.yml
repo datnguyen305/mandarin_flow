@@ -42,9 +42,38 @@ services:
       TRANSLATION_BATCH_SIZE: ${TRANSLATION_BATCH_SIZE:-30}
     volumes:
       - ./cookies:/app/cookies
-    ports:
-      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  go-api:
+    build:
+      context: ./go-api
+    environment:
+      LISTEN_ADDRESS: :8080
+      LEGACY_BACKEND_URL: http://backend:8000
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/youtube_language_learning
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      GUEST_COOKIE_NAME: ${GUEST_COOKIE_NAME:-mandarinflow_guest}
+      GUEST_SESSION_DAYS: ${GUEST_SESSION_DAYS:-365}
+      DEV_ACCESS_TOKEN: ${DEV_ACCESS_TOKEN:-}
+      YT_DLP_COOKIES_FILE: /app/cookies/cookies.txt
+    volumes:
+      - ./cookies:/app/cookies
+    ports:
+      - "8000:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -62,7 +91,7 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      - go-api
 
 volumes:
   postgres_data:

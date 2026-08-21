@@ -48,7 +48,41 @@ services:
       GUEST_SESSION_DAYS: ${GUEST_SESSION_DAYS:-365}
     volumes:
       - ./cookies:/app/cookies
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  go-api:
+    image: ghcr.io/datnguyen305/mandarin-flow-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      LISTEN_ADDRESS: :8080
+      LEGACY_BACKEND_URL: http://backend:8000
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+      GUEST_COOKIE_NAME: ${GUEST_COOKIE_NAME:-mandarinflow_guest}
+      GUEST_SESSION_DAYS: ${GUEST_SESSION_DAYS:-365}
+      DEV_ACCESS_TOKEN: ${DEV_ACCESS_TOKEN:?DEV_ACCESS_TOKEN is required}
+      YT_DLP_COOKIES_FILE: /app/cookies/cookies.txt
+    volumes:
+      - ./cookies:/app/cookies
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      backend:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -61,7 +95,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
       NEXT_PUBLIC_FEEDBACK_EMAIL: ${NEXT_PUBLIC_FEEDBACK_EMAIL:-}
     depends_on:
-      - backend
+      - go-api
 
   caddy:
     image: caddy:2-alpine
@@ -77,7 +111,7 @@ services:
       - caddy_config:/config
     depends_on:
       - frontend
-      - backend
+      - go-api
 
 volumes:
   postgres_data:

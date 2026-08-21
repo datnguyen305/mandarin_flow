@@ -2,8 +2,9 @@
   encode zstd gzip
   header Referrer-Policy "strict-origin-when-cross-origin"
 
-  reverse_proxy /api/* backend:8000
-  reverse_proxy /health backend:8000
+  reverse_proxy /api/* go-api:8080
+  reverse_proxy /health go-api:8080
+  reverse_proxy /ready go-api:8080
 
   reverse_proxy frontend:3000
 }
