@@ -86,6 +86,7 @@ func cors(frontendURL string) func(http.Handler) http.Handler {
 	allowedOrigins := map[string]struct{}{
 		strings.TrimRight(frontendURL, "/"): {},
 		"http://localhost:3000":             {},
+		"http://127.0.0.1:3000":             {},
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
