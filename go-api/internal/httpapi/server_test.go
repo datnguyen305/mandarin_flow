@@ -101,6 +101,24 @@ func TestCORSAllowsConfiguredFrontend(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsLocalLoopbackFrontend(t *testing.T) {
+	handler := testHandler(t, "http://127.0.0.1:1")
+	for _, origin := range []string{"http://localhost:3000", "http://127.0.0.1:3000"} {
+		request := httptest.NewRequest(http.MethodOptions, "/api/videos", nil)
+		request.Header.Set("Origin", origin)
+		response := httptest.NewRecorder()
+
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("origin %s: expected 204, got %d", origin, response.Code)
+		}
+		if response.Header().Get("Access-Control-Allow-Origin") != origin {
+			t.Fatalf("origin %s was not allowed", origin)
+		}
+	}
+}
+
 func testHandler(t *testing.T, legacy string) http.Handler {
 	t.Helper()
 	legacyURL, err := url.Parse(legacy)
