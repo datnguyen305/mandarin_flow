@@ -1,6 +1,24 @@
 import type { DictionaryEntry, ImportedVideo, ProcessingProgress, SavedVocabulary, SubtitleResponse, VideoProgress } from "@/types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+function resolveApiBaseUrl(configuredUrl: string): string {
+  if (typeof window === "undefined") {
+    return configuredUrl;
+  }
+
+  const apiUrl = new URL(configuredUrl);
+  const pageHostname = window.location.hostname;
+  const localHostnames = new Set(["localhost", "127.0.0.1"]);
+  if (localHostnames.has(apiUrl.hostname) && localHostnames.has(pageHostname)) {
+    apiUrl.hostname = pageHostname;
+    return apiUrl.toString().replace(/\/$/, "");
+  }
+
+  return configuredUrl.replace(/\/$/, "");
+}
+
+const API_BASE_URL = resolveApiBaseUrl(configuredApiBaseUrl);
 export { API_BASE_URL };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
