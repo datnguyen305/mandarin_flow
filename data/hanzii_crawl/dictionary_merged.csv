@@ -31261,7 +31261,7 @@ word姐,word姐,w o r d jie3,chị tôi (phiên bản tiếng lóng Internet c�
 學童,学童,xue2 tong2,trẻ em trong độ tuổi đi học,,,,[],[],not_crawled
 學籍,学籍,xue2 ji2,ghi danh là học sinh hiện tại,,,,[],[],not_crawled
 學級,学级,xue2 ji2,lớp học,,,,[],[],not_crawled
-學習,学习,xue2 xi2,học; tìm hiểu,,,,[],[],no_result
+學習,学习,xue2 xi2,học; tìm hiểu,xuéxí,1. học; học tập,Động từ,"[{""text"": ""学习桌【學習桌】"", ""pinyin"": ""xuéxí zhuō"", ""meaning"": ""bàn học; bàn để học tập""}, {""text"": ""学习用功【學習用功】"", ""pinyin"": ""xuéxí yònggōng"", ""meaning"": ""chăm chỉ học tập""}, {""text"": ""终身学习【終身學習】"", ""pinyin"": ""zhōngshēn xuéxí"", ""meaning"": ""học tập suốt đời""}]",[],success
 學習刻苦,学习刻苦,xue2 xi2 ke4 ku3,học tập chăm chỉ; cần cù,,,,[],[],not_crawled
 學習強國,学习强国,Xue2 xi2 Qiang2 guo2,"Xuexi Qiangguo, ứng dụng của Trung Quốc thiết kế để dạy Tư tưởng Tập Cận Bình, phát hành năm 2019",,,,[],[],not_crawled
 學習時報,学习时报,Xue2 xi2 Shi2 bao4,"Study Times, tạp chí của Trường Đảng Trung ương 中央黨校|中央党校[Zhong1 yang1 Dang3 xiao4]",,,,[],[],not_crawled
@@ -108293,7 +108293,7 @@ word姐,word姐,w o r d jie3,chị tôi (phiên bản tiếng lóng Internet c�
 醫護人員,医护人员,yi1 hu4 ren2 yuan2,nhân viên y tế; bác sĩ và y tá,,,,[],[],not_crawled
 醫道,医道,Yi1 dao4,Hur Jun (phim truyền hình),,,,[],[],not_crawled
 醫道,医道,yi1 dao4,nghệ thuật chữa bệnh; kỹ năng y học,,,,[],[],not_crawled
-醫院,医院,yi1 yuan4,bệnh viện,,,,[],[],no_result
+醫院,医院,yi1 yuan4,bệnh viện,yīyuàn,bệnh viện; nhà thương,Danh từ,"[{""text"": ""军医院【軍醫院】"", ""pinyin"": ""jūn yīyuàn"", ""meaning"": ""bệnh viện quân đội""}, {""text"": ""总医院【總醫院】"", ""pinyin"": ""zǒng yīyuàn"", ""meaning"": ""Bệnh viện lớn, có nhiều chuyên khoa, cung cấp khám chữa bệnh toàn diện ...""}, {""text"": ""校医院【校醫院】"", ""pinyin"": ""xiào yīyuàn"", ""meaning"": ""phòng khám trường học; bệnh viện trường học""}]",[],success
 醫鬧,医闹,yi1 nao4,"(từ mới khoảng năm 2013) gây rối có tổ chức tại cơ sở y tế hoặc hành hung bằng lời nói và thể xác đối với nhân viên y tế, bởi bệnh nhân bức xúc hoặc người đại diện như thành viên gia đình hoặc côn đồ được thuê, thường nhằm mục đích nhận bồi thường",,,,[],[],not_crawled
 醬,酱,jiang4,một loại sốt đặc từ đậu nành lên men; ướp trong sốt đậu nành; sốt; mứt,,,,[],[],not_crawled
 醬料,酱料,jiang4 liao4,nước sốt,,,,[],[],not_crawled
@@ -111099,7 +111099,7 @@ word姐,word姐,w o r d jie3,chị tôi (phiên bản tiếng lóng Internet c�
 閉集,闭集,bi4 ji2,tập hợp đóng (toán học),,,,[],[],not_crawled
 閉音節,闭音节,bi4 yin1 jie2,âm tiết đóng,,,,[],[],not_crawled
 閉館,闭馆,bi4 guan3,"(thư viện, bảo tàng, v.v.) đóng cửa",,,,[],[],not_crawled
-開,开,kai1,"mở (ngoại động từ hoặc nội động từ); (tàu thuyền, xe cộ, quân đội, v.v.) bắt đầu; bật; vận hành; hoạt động; chạy; đun sôi; viết (đơn thuốc, séc, hóa đơn, v.v.); (bổ ngữ xu hướng) đi; rời; carat (vàng); viết tắt của Kelvin, 開爾文|开尔文[Kai1 er3 wen2]; viết tắt của 開本|开本[kai1 ben3], khổ sách",kāi,,,"[{""text"": ""开例【開例】"", ""pinyin"": ""kāi lì"", ""meaning"": ""phá lệ; phá rào; tạo tiền lệ (làm những việc không đúng qui định hay n ...""}, {""text"": ""开付【開付】"", ""pinyin"": ""kāi fù"", ""meaning"": ""phát hành thanh toán; lập chứng từ thanh toán""}, {""text"": ""开业【開業】"", ""pinyin"": ""kāiyè"", ""meaning"": ""mở cửa; xây dựng; thành lập; khai trương (các hoạt động kinh doanh, sả ...""}]",[],needs_parser_review
+開,开,kai1,"mở (ngoại động từ hoặc nội động từ); (tàu thuyền, xe cộ, quân đội, v.v.) bắt đầu; bật; vận hành; hoạt động; chạy; đun sôi; viết (đơn thuốc, séc, hóa đơn, v.v.); (bổ ngữ xu hướng) đi; rời; carat (vàng); viết tắt của Kelvin, 開爾文|开尔文[Kai1 er3 wen2]; viết tắt của 開本|开本[kai1 ben3], khổ sách",kāi,1. mở; bật; mở ra,Động từ,"[{""text"": ""开例【開例】"", ""pinyin"": ""kāi lì"", ""meaning"": ""phá lệ; phá rào; tạo tiền lệ (làm những việc không đúng qui định hay n ...""}, {""text"": ""开付【開付】"", ""pinyin"": ""kāi fù"", ""meaning"": ""phát hành thanh toán; lập chứng từ thanh toán""}, {""text"": ""开业【開業】"", ""pinyin"": ""kāiyè"", ""meaning"": ""mở cửa; xây dựng; thành lập; khai trương (các hoạt động kinh doanh, sả ...""}]",[],success
 開三次方,开三次方,kai1 san1 ci4 fang1,(toán học) khai căn bậc ba,,,,[],[],not_crawled
 開交,开交,kai1 jiao1,(dùng với phủ định) kết thúc; (không thể) chấm dứt; (không thể) hoàn thành,,,,[],[],not_crawled
 開仗,开仗,kai1 zhang4,bắt đầu chiến tranh; khai chiến,,,,[],[],not_crawled
