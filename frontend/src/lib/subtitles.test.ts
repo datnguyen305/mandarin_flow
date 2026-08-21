@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { convertChineseText } from "./chinese-script";
 import { extractYouTubeId, findActiveSubtitleIndex, mergeSubtitleBatch } from "./subtitles";
 
 const subtitles = [
@@ -63,5 +64,15 @@ describe("saved vocabulary review URLs", () => {
     const timestamp = 125.8;
 
     expect(`/watch?v=${youtubeVideoId}&t=${Math.floor(timestamp)}`).toBe("/watch?v=abc123abc12&t=125");
+  });
+});
+
+describe("Chinese script conversion", () => {
+  it("converts simplified subtitle text to traditional Chinese", () => {
+    expect(convertChineseText("这个视频有中文字幕。", "traditional")).toBe("這個視頻有中文字幕。");
+  });
+
+  it("converts traditional subtitle text back to simplified Chinese", () => {
+    expect(convertChineseText("這個視頻有中文字幕。", "simplified")).toBe("这个视频有中文字幕。");
   });
 });

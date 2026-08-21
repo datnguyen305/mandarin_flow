@@ -3,15 +3,17 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Clock, Loader2, Search, RotateCcw } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, Loader2, Search, RotateCcw, Languages } from "lucide-react";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { API_BASE_URL, getRawSubtitles, lookupWord, saveVocabulary, updatePlaybackPosition } from "@/lib/api";
 import { findActiveSubtitleIndex, formatTimestamp, mergeSubtitleBatch } from "@/lib/subtitles";
+import { convertChineseText, type ChineseScript } from "@/lib/chinese-script";
 import type { DictionaryEntry, SubtitleBatch, SubtitleLine, SubtitleToken } from "@/types";
 
 const LAST_WATCH_HREF_KEY = "fluentmandarin:last-watch-href";
 const FLOATING_VIDEO_HIDDEN_KEY = "fluentmandarin:floating-video-hidden";
+const SUBTITLE_SCRIPT_KEY = "fluentmandarin:subtitle-script";
 
 function WatchContent() {
   const searchParams = useSearchParams();
@@ -31,8 +33,16 @@ function WatchContent() {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [selectedSubtitle, setSelectedSubtitle] = useState<SubtitleLine | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"words" | "transcript">("words");
+  const [subtitleScript, setSubtitleScript] = useState<ChineseScript>("simplified");
   const lastPlaybackPostRef = useRef({ time: -1, sentAt: 0 });
   const transcriptItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  useEffect(() => {
+    const savedScript = window.localStorage.getItem(SUBTITLE_SCRIPT_KEY);
+    if (savedScript !== "simplified" && savedScript !== "traditional") return;
+    const timer = window.setTimeout(() => setSubtitleScript(savedScript), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.add("max-h-screen", "overflow-hidden");
@@ -42,6 +52,11 @@ function WatchContent() {
       document.body.classList.remove("max-h-screen", "overflow-hidden");
     };
   }, []);
+
+  function handleScriptChange(script: ChineseScript) {
+    setSubtitleScript(script);
+    window.localStorage.setItem(SUBTITLE_SCRIPT_KEY, script);
+  }
 
   useEffect(() => {
     if (!videoId) return;
@@ -198,12 +213,27 @@ function WatchContent() {
           </div>
         </div>
         <div className="relative flex min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 p-3 text-center shadow-sm">
-          <div className="mb-3 flex shrink-0 items-center justify-between">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
             <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-700">
               <span className="h-2 w-2 rounded-full bg-brand-500" />
               Phụ đề tương tác
             </span>
-            <span className="text-[11px] text-slate-400">Bấm từ để xem nghĩa</span>
+            <div className="flex items-center gap-2">
+              <span className="hidden text-[11px] text-slate-400 sm:inline">Bấm từ để xem nghĩa</span>
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-cream-300 bg-cream-100 p-0.5" aria-label="Chọn dạng chữ phụ đề">
+                <Languages size={14} className="mx-1 text-slate-500" />
+                {(["simplified", "traditional"] as ChineseScript[]).map((script) => (
+                  <button
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${subtitleScript === script ? "bg-cream-50 text-brand-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                    key={script}
+                    onClick={() => handleScriptChange(script)}
+                    type="button"
+                  >
+                    {script === "simplified" ? "简体" : "繁體"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {loading ? (
@@ -229,7 +259,7 @@ function WatchContent() {
                 <Clock size={14} />
                 {formatTimestamp(activeSubtitle.start)}
               </div>
-              <p className="mt-2 font-serif text-2xl font-bold leading-relaxed tracking-wide text-slate-800 xl:text-3xl">{activeSubtitle.text}</p>
+              <p className="mt-2 font-serif text-2xl font-bold leading-relaxed tracking-wide text-slate-800 xl:text-3xl">{convertChineseText(activeSubtitle.text, subtitleScript)}</p>
               <p className="mt-2 text-sm leading-6 text-slate-600 xl:text-base">
                 {activeSubtitle.processing_status === "failed" ? "Batch này xử lý lỗi. Có thể retry sau." : activeVietnameseText}
               </p>
@@ -246,7 +276,7 @@ function WatchContent() {
                     onClick={() => handleTokenClick(token, activeSubtitle)}
                   >
                     <span className="font-mono text-xs leading-4 text-brand-700">{token.pinyin}</span>
-                    <span className="font-serif text-xl leading-7">{token.text}</span>
+                    <span className="font-serif text-xl leading-7">{convertChineseText(token.text, subtitleScript)}</span>
                   </button>
                   ))}
                 </div>
@@ -290,10 +320,10 @@ function WatchContent() {
                 >
                   <span className="flex items-center gap-3">
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-100 font-serif text-base font-bold text-brand-800">
-                      {token.text.slice(0, 1)}
+                      {convertChineseText(token.text, subtitleScript).slice(0, 1)}
                     </span>
                     <span>
-                      <span className="block font-serif text-base font-bold text-slate-800">{token.text}</span>
+                      <span className="block font-serif text-base font-bold text-slate-800">{convertChineseText(token.text, subtitleScript)}</span>
                       <span className="block text-sm font-mono text-brand-700">{token.pinyin}</span>
                     </span>
                   </span>
@@ -321,7 +351,7 @@ function WatchContent() {
                   }}
                 >
                   <span className="block text-xs font-medium text-slate-400">{formatTimestamp(subtitle.start)}</span>
-                  <span className="mt-1 block font-serif text-base font-semibold text-slate-800">{subtitle.text}</span>
+                  <span className="mt-1 block font-serif text-base font-semibold text-slate-800">{convertChineseText(subtitle.text, subtitleScript)}</span>
                   <span className="mt-1 block text-sm leading-6 text-slate-600">{getVietnameseText(subtitle)}</span>
                 </button>
               ))}
