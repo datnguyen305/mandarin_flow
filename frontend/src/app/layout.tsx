@@ -14,6 +14,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi">
       <body className="font-sans antialiased">
         <AppHeader />
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 sm:hidden">
+          Hãy dùng máy tính để đem lại trải nghiệm tốt hơn
+        </div>
         {children}
         <ImportProcessingMonitor />
         <FloatingVideoPlayer />
