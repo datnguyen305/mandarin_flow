@@ -24,6 +24,8 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        INSTALL_DEV: "true"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/youtube_language_learning
       REDIS_URL: redis://redis:6379/0
