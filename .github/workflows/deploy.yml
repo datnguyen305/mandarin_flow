@@ -102,6 +102,24 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
+      - name: Prepare VPS runtime
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            'set -eu
+             export DEBIAN_FRONTEND=noninteractive
+             command -v git >/dev/null 2>&1 || { apt-get update && apt-get install -y ca-certificates curl git; }
+             command -v docker >/dev/null 2>&1 || { curl -fsSL https://get.docker.com | sh; }
+             systemctl enable --now docker
+             if [ ! -d /root/mandarin_flow/.git ]; then
+               rm -rf /root/mandarin_flow
+               git clone --branch main --single-branch https://github.com/datnguyen305/mandarin_flow.git /root/mandarin_flow
+             fi
+             install -d -m 700 /root/mandarin_flow/cookies'
+
       - name: Pull release images
         env:
           DEPLOY_SHA: ${{ github.sha }}
