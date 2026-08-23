@@ -173,18 +173,22 @@ jobs:
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "docker pull '$FRONTEND_IMAGE:$DEPLOY_SHA'"
 
-      - name: Sync production environment
+      - name: Validate VPS environment file
         env:
-          PRODUCTION_ENV_FILE: ${{ secrets.PRODUCTION_ENV_FILE }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          test -n "$PRODUCTION_ENV_FILE" || { echo "Missing GitHub Secret: PRODUCTION_ENV_FILE" >&2; exit 1; }
-          printf '%s' "$PRODUCTION_ENV_FILE" | ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            'umask 077 && cd /root/mandarin_flow && cat > .env'
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            'set -eu
+             cd /root/mandarin_flow
+             test -s .env || { echo "Missing /root/mandarin_flow/.env. Upload it manually before deploying." >&2; exit 1; }
+             for key in FRONTEND_URL NEXT_PUBLIC_API_BASE_URL POSTGRES_PASSWORD DEV_ACCESS_TOKEN; do
+               grep -q "^${key}=.*[^[:space:]]" .env || { echo "Missing required env: ${key}" >&2; exit 1; }
+             done
+             chmod 600 .env'
 
-      - name: Recreate services with synced environment
+      - name: Recreate services with local environment file
         env:
           DEPLOY_SHA: ${{ github.sha }}
           VPS_HOST: ${{ secrets.VPS_HOST }}

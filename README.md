@@ -199,7 +199,7 @@ Configure this repository variable because it is public and compiled into the fr
 NEXT_PUBLIC_FEEDBACK_EMAIL=your-public-email@example.com
 ```
 
-The VPS must already contain `/root/mandarin_flow/.env`. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_PASSWORD_URLENCODED`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image. `POSTGRES_PASSWORD` is passed raw to PostgreSQL; `POSTGRES_PASSWORD_URLENCODED` is used in application connection URLs. Generate the encoded value without printing the password:
+The VPS must already contain `/root/mandarin_flow/.env`; GitHub Actions validates but does not upload or overwrite this file. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_PASSWORD_URLENCODED`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image. `POSTGRES_PASSWORD` is passed raw to PostgreSQL; `POSTGRES_PASSWORD_URLENCODED` is used in application connection URLs. Generate the encoded value without printing the password:
 
 ```bash
 python3 -c 'from urllib.parse import quote; print(quote(input(), safe=""))'
