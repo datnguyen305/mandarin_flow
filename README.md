@@ -207,6 +207,15 @@ python3 -c 'from urllib.parse import quote; print(quote(input(), safe=""))'
 
 For a freshly reinstalled VPS, run `sudo bash scripts/bootstrap_vps.sh` from a checked-out copy of this repository. The script installs Docker if needed, clones `main`, and refuses to overwrite an existing application directory.
 
+After the production stack is healthy, copy the local dump to the VPS and restore it with the explicit destructive confirmation:
+
+```bash
+scp /tmp/mandarinflow-local.sql root@YOUR_VPS_IP:/root/mandarinflow-local.sql
+ssh root@YOUR_VPS_IP 'cd /root/mandarin_flow && RESTORE_LOCAL_DB_CONFIRM=YES bash scripts/restore_local_db.sh /root/mandarinflow-local.sql'
+```
+
+The restore script stops application services, clears the production `public` schema, imports the dump, and starts the application services again. It does not touch Docker volumes outside this Compose project.
+
 To roll back, use a previously successful commit SHA:
 
 ```bash
