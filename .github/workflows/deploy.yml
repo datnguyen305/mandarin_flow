@@ -140,15 +140,38 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
 
-      - name: Pull release images
+      - name: Pull backend image
         env:
           DEPLOY_SHA: ${{ github.sha }}
+          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "cd /root/mandarin_flow && IMAGE_TAG='$DEPLOY_SHA' docker compose -f docker-compose.prod.yml pull go-api backend frontend"
+            "docker pull '$BACKEND_IMAGE:$DEPLOY_SHA'"
+
+      - name: Pull Go API image
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          API_IMAGE: ${{ env.API_IMAGE }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "docker pull '$API_IMAGE:$DEPLOY_SHA'"
+
+      - name: Pull frontend image
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "docker pull '$FRONTEND_IMAGE:$DEPLOY_SHA'"
 
       - name: Sync production environment
         env:
