@@ -41,9 +41,10 @@ class AgentRequestService:
             # An active approval request is not the same as an imported video.
             # Return its real state so callers can approve or inspect it instead
             # of repeatedly creating duplicate requests.
+            notification_sent = True
             if existing.status == "pending" and existing.error:
-                await self._notify(existing)
-            return existing.id, "pending_approval", 0
+                notification_sent = await self._notify(existing)
+            return existing.id, "pending_approval" if notification_sent else "notification_failed", 0
         if guest_id is not None:
             request_count = await self._guest_video_request_count(guest_id)
             if request_count >= settings.chatbot_video_request_limit:
@@ -61,8 +62,8 @@ class AgentRequestService:
         )
         self.db.add(request)
         await self.db.commit()
-        await self._notify(request)
-        return request_id, "pending_approval", 0
+        notification_sent = await self._notify(request)
+        return request_id, "pending_approval" if notification_sent else "notification_failed", 0
 
     async def _guest_video_request_count(self, guest_id: str) -> int:
         result = await self.db.execute(
@@ -92,8 +93,8 @@ class AgentRequestService:
         )
         self.db.add(request)
         await self.db.commit()
-        await self._notify(request)
-        return request_id, "pending_approval", skipped
+        notification_sent = await self._notify(request)
+        return request_id, "pending_approval" if notification_sent else "notification_failed", skipped
 
     async def request_cookie_update(self, payload: CookieAgentRequest) -> tuple[str, str, int]:
         request_id = self._new_id()
@@ -108,8 +109,8 @@ class AgentRequestService:
         )
         self.db.add(request)
         await self.db.commit()
-        await self._notify(request)
-        return request_id, "manual_action_required", 0
+        notification_sent = await self._notify(request)
+        return request_id, "manual_action_required" if notification_sent else "notification_failed", 0
 
     async def _filter_existing_words(self, payload: VocabularyAgentRequest):
         values = {item.simplified for item in payload.words} | {item.traditional for item in payload.words if item.traditional}
@@ -144,13 +145,14 @@ class AgentRequestService:
             )
         return words
 
-    async def _notify(self, request: AgentRequest) -> None:
+    async def _notify(self, request: AgentRequest) -> bool:
         sent = await self.telegram.send_request(request.id, request.type, request.payload, request.reason)
         if sent:
             request.error = None
         else:
             request.error = "Telegram notification was not delivered; request remains pending."
         await self.db.commit()
+        return sent
 
     async def approve(self, request_id: str, approved_by: str) -> AgentRequest:
         request = await self._lock_request(request_id)

@@ -73,7 +73,7 @@ class CookieExportResult(BaseModel):
 
 class AgentRequestResponse(BaseModel):
     request_id: str | None = None
-    status: Literal["pending_approval", "already_exists", "manual_action_required", "limit_reached"]
+    status: Literal["pending_approval", "notification_failed", "already_exists", "manual_action_required", "limit_reached"]
     skipped_count: int = 0
 
 

@@ -44,6 +44,13 @@ async def chat_with_assistant(
                 import_status="limit_reached",
             )
         pending_action.update({"request_id": request_id, "approval_channel": "telegram"})
+        if request_status == "notification_failed":
+            return ChatAgentResponse(
+                reply=f"Đã tạo yêu cầu {request_id}, nhưng chưa gửi được thông báo Telegram. Vui lòng thử lại sau.",
+                youtube_url=youtube_url,
+                import_status="notification_failed",
+                pending_action=pending_action,
+            )
         reply = f"Đã gửi yêu cầu import vào Telegram để bạn duyệt. Request: {request_id}"
     return ChatAgentResponse(reply=reply, youtube_url=youtube_url, pending_action=pending_action)
 
@@ -177,5 +184,8 @@ async def _handle_telegram_message(text: str, chat_id: str, db: AsyncSession, te
         return
     if request_status == "already_exists":
         await telegram.send_message(chat_id, "Video này đã có trong MandarinFlow.")
+        return
+    if request_status == "notification_failed":
+        await telegram.send_message(chat_id, f"Đã tạo yêu cầu {request_id}, nhưng chưa gửi được thông báo xác nhận. Vui lòng thử lại sau.")
         return
     await telegram.send_message(chat_id, f"Đã tạo yêu cầu import {request_id}. Hãy bấm Approve trong tin nhắn xác nhận để bắt đầu xử lý.")

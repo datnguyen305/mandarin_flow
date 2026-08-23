@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     telegram_admin_chat_id: str | None = None
     telegram_allowed_user_id: str | None = None
     telegram_webhook_secret: str | None = None
+    telegram_connect_timeout_seconds: float = 15.0
+    telegram_read_timeout_seconds: float = 30.0
+    telegram_write_timeout_seconds: float = 30.0
+    telegram_pool_timeout_seconds: float = 15.0
+    telegram_max_attempts: int = 3
+    telegram_retry_backoff_seconds: float = 0.5
     agent_request_expiry_hours: int = 24
     chatbot_video_request_limit: int = 3
 

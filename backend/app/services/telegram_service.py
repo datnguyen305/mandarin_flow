@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -6,6 +7,8 @@ import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+TELEGRAM_API_BASE_URL = "https://api.telegram.org"
+TRANSIENT_EXCEPTIONS = (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout)
 
 
 class TelegramService:
@@ -16,27 +19,71 @@ class TelegramService:
     def enabled(self) -> bool:
         return bool(self.bot_token and settings.telegram_admin_chat_id)
 
-    async def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    @staticmethod
+    def _timeout() -> httpx.Timeout:
+        return httpx.Timeout(
+            connect=settings.telegram_connect_timeout_seconds,
+            read=settings.telegram_read_timeout_seconds,
+            write=settings.telegram_write_timeout_seconds,
+            pool=settings.telegram_pool_timeout_seconds,
+        )
+
+    @staticmethod
+    def _transport() -> httpx.AsyncHTTPTransport:
+        return httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+
+    @staticmethod
+    def _retry_after(response: httpx.Response) -> float | None:
+        value = response.headers.get("retry-after")
+        if value is None:
+            return None
+        try:
+            return max(0.0, min(float(value), 10.0))
+        except ValueError:
+            return None
+
+    async def _call(self, method: str, payload: dict[str, Any]) -> Any | None:
         if not self.bot_token:
             logger.warning("Telegram is not configured; skipping notification")
             return None
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.post(f"https://api.telegram.org/bot{self.bot_token}/{method}", json=payload)
-                response.raise_for_status()
-                data = response.json()
-                if not data.get("ok"):
-                    raise RuntimeError("Telegram API returned an unsuccessful response")
-                return data.get("result")
-        except httpx.HTTPStatusError as exc:
-            if method == "editMessageText" and exc.response.status_code == 400:
-                logger.warning("Telegram notification update was rejected", extra={"method": method, "status_code": 400})
-            else:
-                logger.exception("Telegram API call failed", extra={"method": method, "status_code": exc.response.status_code})
-            return None
-        except (httpx.HTTPError, ValueError, RuntimeError):
-            logger.exception("Telegram API call failed", extra={"method": method})
-            return None
+        attempts = max(1, settings.telegram_max_attempts)
+        url = f"{TELEGRAM_API_BASE_URL}/bot{self.bot_token}/{method}"
+        async with httpx.AsyncClient(transport=self._transport(), timeout=self._timeout()) as client:
+            for attempt in range(1, attempts + 1):
+                try:
+                    response = await client.post(url, json=payload)
+                    if response.status_code == 429 and attempt < attempts:
+                        delay = self._retry_after(response) or settings.telegram_retry_backoff_seconds * (2 ** (attempt - 1))
+                        logger.warning("Telegram API rate limited", extra={"method": method, "attempt": attempt, "status_code": 429})
+                        await asyncio.sleep(delay)
+                        continue
+                    response.raise_for_status()
+                    data = response.json()
+                    if not data.get("ok"):
+                        logger.warning("Telegram API returned an unsuccessful response", extra={"method": method, "attempt": attempt})
+                        return None
+                    return data.get("result")
+                except TRANSIENT_EXCEPTIONS as exc:
+                    logger.warning(
+                        "Telegram network request failed",
+                        extra={"method": method, "attempt": attempt, "error_type": type(exc).__name__},
+                    )
+                    if attempt >= attempts:
+                        return None
+                    await asyncio.sleep(settings.telegram_retry_backoff_seconds * (2 ** (attempt - 1)))
+                except httpx.HTTPStatusError as exc:
+                    logger.warning(
+                        "Telegram API request rejected",
+                        extra={"method": method, "attempt": attempt, "status_code": exc.response.status_code},
+                    )
+                    return None
+                except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+                    logger.warning(
+                        "Telegram API request failed",
+                        extra={"method": method, "attempt": attempt, "error_type": type(exc).__name__},
+                    )
+                    return None
+        return None
 
     async def send_request(self, request_id: str, request_type: str, payload: dict[str, Any], reason: str) -> bool:
         if not self.enabled:
