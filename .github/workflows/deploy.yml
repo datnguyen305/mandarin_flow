@@ -102,7 +102,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
-      - name: Pull images and deploy
+      - name: Pull release images
         env:
           DEPLOY_SHA: ${{ github.sha }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
@@ -116,9 +116,29 @@ jobs:
              git switch main && \
              git pull --ff-only origin main && \
              docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin && \
-             IMAGE_TAG='$DEPLOY_SHA' docker compose -f docker-compose.prod.yml pull go-api backend frontend && \
-             IMAGE_TAG='$DEPLOY_SHA' docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans && \
-             docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy && \
+             IMAGE_TAG='$DEPLOY_SHA' docker compose -f docker-compose.prod.yml pull go-api backend frontend"
+
+      - name: Sync production environment
+        env:
+          PRODUCTION_ENV_FILE: ${{ secrets.PRODUCTION_ENV_FILE }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          test -n "$PRODUCTION_ENV_FILE" || { echo "Missing GitHub Secret: PRODUCTION_ENV_FILE" >&2; exit 1; }
+          printf '%s' "$PRODUCTION_ENV_FILE" | ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            'umask 077 && cd /root/mandarin_flow && cat > .env'
+
+      - name: Recreate services with synced environment
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "cd /root/mandarin_flow && \
+             IMAGE_TAG='$DEPLOY_SHA' docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate --remove-orphans && \
              docker compose -f docker-compose.prod.yml ps"
 
       - name: Verify production health

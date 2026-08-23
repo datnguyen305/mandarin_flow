@@ -81,7 +81,7 @@ class AssistantService:
                     function_calls = [item for item in response_payload.get("output", []) if item.get("type") == "function_call"]
                     if not function_calls:
                         reply = self._extract_output_text(response_payload)
-                        return reply or self._fallback_reply(youtube_url), youtube_url, tool_result
+                        return reply or self._fallback_reply(youtube_url), youtube_url, pending_action
 
                     for function_call in function_calls:
                         try:
