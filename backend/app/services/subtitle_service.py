@@ -1,5 +1,7 @@
 import logging
+import inspect
 import time
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,12 +15,16 @@ from app.repositories.video_repository import VideoRepository
 from app.schemas.subtitle import SubtitleBatchResponse, SubtitleLineResponse, SubtitleListResponse, SubtitleProcessingProgress, SubtitleTokenResponse
 from app.services.asr_service import ASRProvider
 from app.services.dictionary_service import DictionaryProvider
+from app.services.pronunciation_service import PronunciationProvider, PypinyinPronunciationProvider, token_pinyin
 from app.services.segmentation_service import SegmentationProvider, locate_tokens
+from app.services.subtitle_nlp_service import SubtitleNLPProvider, SubtitleTokenAnalysis
 from app.services.transcript_types import RawSubtitle
 from app.services.translation_service import TranslationProvider
+from app.services.video_topic_classifier import VideoTopicClassifier
 from app.services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
+BatchProgressCallback = Callable[[float], Awaitable[None]]
 
 
 class SubtitleRetrievalProvider:
@@ -62,6 +68,9 @@ class SubtitleService:
         segmentation_provider: SegmentationProvider,
         translation_provider: TranslationProvider,
         dictionary_provider: DictionaryProvider,
+        pronunciation_provider: PronunciationProvider | None = None,
+        subtitle_nlp_provider: SubtitleNLPProvider | None = None,
+        video_topic_classifier: VideoTopicClassifier | None = None,
     ) -> None:
         self.db = db
         self.cache = cache
@@ -71,60 +80,161 @@ class SubtitleService:
         self.segmentation_provider = segmentation_provider
         self.translation_provider = translation_provider
         self.dictionary_provider = dictionary_provider
+        self.pronunciation_provider = pronunciation_provider or PypinyinPronunciationProvider()
+        self.subtitle_nlp_provider = subtitle_nlp_provider
+        self.video_topic_classifier = video_topic_classifier
         self.video_repo = VideoRepository(db)
         self.subtitle_repo = SubtitleRepository(db)
         self.batch_repo = BatchRepository(db)
 
-    async def prepare_video(self, url: str, source_language: str, target_language: str) -> SubtitleProcessingProgress:
+    async def prepare_video(
+        self,
+        url: str,
+        source_language: str,
+        target_language: str,
+        tags: list[str] | None = None,
+        defer_content_preparation: bool = False,
+    ) -> SubtitleProcessingProgress:
         if source_language != "zh" or target_language != "vi":
             raise UnsupportedLanguageError("Only zh to vi is supported in the MVP")
 
         metadata = await self.youtube_service.get_metadata(url)
-        cache_key = f"video:{metadata.video_id}:subtitles:{source_language}-{target_language}"
-        cached = await self.cache.get(cache_key)
-        if cached:
-            logger.info("Processed subtitles found in Redis for %s", metadata.video_id)
-            video = await self.video_repo.get_by_youtube_id(metadata.video_id)
-            if video is not None:
-                return await self.progress_for_video(video)
-
-        existing = await self.video_repo.get_with_subtitles(metadata.video_id)
-        if existing and existing.subtitles and all(subtitle.processing_status == "processed" for subtitle in existing.subtitles):
-            logger.info("Completed subtitles found in PostgreSQL for %s", metadata.video_id)
-            await self.cache.set(cache_key, self._response_from_video(existing).model_dump_json())
-            return await self.progress_for_video(existing)
-
         video = await self.video_repo.upsert(
             youtube_video_id=metadata.video_id,
             title=metadata.title,
             url=metadata.url,
             thumbnail_url=metadata.thumbnail_url,
             language=source_language,
+            tags=tags or None,
+            duration_seconds=metadata.duration_seconds,
+            channel_name=metadata.channel_name,
+            channel_id=metadata.channel_id,
+            upload_date=metadata.upload_date,
+            metadata_fetched_at=metadata.metadata_fetched_at,
         )
+        await self.db.commit()
+        cache_key = f"video:{metadata.video_id}:subtitles:{source_language}-{target_language}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            logger.info("Processed subtitles found in Redis for %s", metadata.video_id)
+            if video is not None:
+                if tags and video.tags != tags:
+                    await self.video_repo.set_tags(video, tags)
+                    await self.db.commit()
+                if tags or video.tags:
+                    return await self.progress_for_video(video)
+
+        existing = await self.video_repo.get_with_subtitles(metadata.video_id)
+        if existing and existing.subtitles and all(subtitle.processing_status == "processed" for subtitle in existing.subtitles):
+            logger.info("Completed subtitles found in PostgreSQL for %s", metadata.video_id)
+            await self.cache.set(cache_key, self._response_from_video(existing).model_dump_json())
+            if tags and existing.tags != tags:
+                await self.video_repo.set_tags(existing, tags)
+                await self.db.commit()
+            return await self.progress_for_video(existing)
+
         await self.video_repo.set_processing_status(video, "processing")
+        video.processing_error_code = None
+        video.processing_error = None
+        await self.video_repo.set_processing_phase(video, "subtitle_source", 0.05)
+        # Persist the import before slow subtitle retrieval/ASR so clients can
+        # reconnect and observe a stable processing record immediately.
+        await self.db.commit()
+
+        if defer_content_preparation:
+            return await self.progress_for_video(video)
+
+        return await self.prepare_video_content(metadata.video_id, source_language, target_language)
+
+    async def prepare_video_content(
+        self,
+        youtube_video_id: str,
+        source_language: str = "zh",
+        target_language: str = "vi",
+    ) -> SubtitleProcessingProgress:
+        video = await self.video_repo.get_by_youtube_id(youtube_video_id)
+        if video is None:
+            raise SubtitlesUnavailableError("Video is not available.")
 
         existing_subtitles = await self.subtitle_repo.list_by_video_id(video.id)
-        if not existing_subtitles:
-            raw_subtitles = await self._retrieve_or_transcribe(metadata.video_id, source_language)
-            raw_lines = self._raw_lines_with_batches(raw_subtitles)
-            await self.subtitle_repo.replace_raw_for_video(video.id, raw_lines)
-            await self.batch_repo.create_missing(video.id, self._batch_definitions(raw_lines))
-        else:
-            await self.batch_repo.create_missing(video.id, self._batch_definitions_from_subtitles(existing_subtitles))
+        if existing_subtitles and all(subtitle.processing_status == "processed" for subtitle in existing_subtitles):
+            return await self.progress_for_video(video)
 
+        try:
+            if not existing_subtitles:
+                raw_subtitles = await self._retrieve_or_transcribe(youtube_video_id, source_language)
+                await self.video_repo.set_processing_phase(video, "preparing_batches", 0.28)
+                await self.db.commit()
+                raw_lines = self._raw_lines_with_batches(raw_subtitles)
+                await self.subtitle_repo.replace_raw_for_video(video.id, raw_lines)
+                await self.batch_repo.create_missing(video.id, self._batch_definitions(raw_lines))
+            else:
+                await self.video_repo.set_processing_phase(video, "preparing_batches", 0.28)
+                await self.batch_repo.create_missing(video.id, self._batch_definitions_from_subtitles(existing_subtitles))
+        except Exception:
+            await self.db.rollback()
+            video = await self.video_repo.get_by_youtube_id(youtube_video_id)
+            if video is not None:
+                await self.video_repo.set_processing_status(video, "failed")
+                await self.video_repo.set_processing_phase(video, "failed", video.processing_progress)
+                video.processing_error_code = getattr(exc, "error_class", getattr(exc, "code", "UNKNOWN"))
+                video.processing_error = str(exc)[:2000]
+                await self.db.commit()
+            raise
+
+        await self.video_repo.set_processing_phase(video, "processing_batches", max(float(video.processing_progress or 0.0), 0.30))
         await self.db.commit()
         return await self.progress_for_video(video)
+
+    async def classify_video_topics(self, youtube_video_id: str) -> list[str]:
+        video = await self.video_repo.get_with_subtitles(youtube_video_id)
+        if video is None or video.tags or not video.subtitles:
+            return list(video.tags) if video is not None else []
+        inferred_tags = await self._classify_video_topics(video.title, [subtitle.text for subtitle in video.subtitles])
+        if inferred_tags:
+            await self.video_repo.set_tags(video, inferred_tags)
+            await self.db.commit()
+        return inferred_tags
+
+    async def _classify_video_topics(self, title: str, subtitles: list[str]) -> list[str]:
+        if self.video_topic_classifier is None:
+            return []
+        try:
+            return await self.video_topic_classifier.classify(title, subtitles)
+        except Exception:
+            logger.exception("Unexpected video topic classification failure")
+            return []
 
     async def process_video(self, url: str, source_language: str, target_language: str) -> str:
         progress = await self.prepare_video(url, source_language, target_language)
         return progress.video_id
 
     async def _retrieve_or_transcribe(self, youtube_video_id: str, source_language: str) -> list[RawSubtitle]:
+        video = await self.video_repo.get_by_youtube_id(youtube_video_id)
+        if video is not None:
+            await self.video_repo.set_processing_phase(video, "youtube_subtitles", 0.08)
+            await self.db.commit()
         try:
             return await self.subtitle_provider.fetch(youtube_video_id, source_language)
         except SubtitlesUnavailableError:
             logger.info("Falling back to ASR for %s", youtube_video_id)
-            return await self.asr_provider.transcribe_youtube_audio(youtube_video_id, source_language)
+            video = await self.video_repo.get_by_youtube_id(youtube_video_id)
+            if video is not None:
+                await self.video_repo.set_processing_phase(video, "asr", 0.14)
+                await self.db.commit()
+            async def report_asr_progress(completed: int, total: int) -> None:
+                current_video = await self.video_repo.get_by_youtube_id(youtube_video_id)
+                if current_video is None:
+                    return
+                ratio = completed / max(total, 1)
+                await self.video_repo.set_processing_phase(current_video, "asr", 0.14 + (0.12 * ratio))
+                await self.db.commit()
+                logger.info("ASR progress", extra={"youtube_id": youtube_video_id, "completed_chunks": completed, "total_chunks": total})
+
+            transcribe = self.asr_provider.transcribe_youtube_audio
+            if "progress_callback" in inspect.signature(transcribe).parameters:
+                return await transcribe(youtube_video_id, source_language, report_asr_progress)
+            return await transcribe(youtube_video_id, source_language)
 
     async def get_subtitles(self, youtube_video_id: str, source_language: str = "zh", target_language: str = "vi") -> SubtitleListResponse:
         cache_key = f"video:{youtube_video_id}:subtitles:{source_language}-{target_language}"
@@ -144,7 +254,14 @@ class SubtitleService:
             raise SubtitlesUnavailableError("Raw subtitles are unavailable. Start processing the video first.")
         return self._response_from_video(video)
 
-    async def process_batch(self, youtube_video_id: str, batch_index: int, source_language: str = "zh", target_language: str = "vi") -> SubtitleBatchResponse:
+    async def process_batch(
+        self,
+        youtube_video_id: str,
+        batch_index: int,
+        source_language: str = "zh",
+        target_language: str = "vi",
+        progress_callback: BatchProgressCallback | None = None,
+    ) -> SubtitleBatchResponse:
         video = await self.video_repo.get_by_youtube_id(youtube_video_id)
         if video is None:
             raise SubtitlesUnavailableError("Video is not available for subtitle processing.")
@@ -165,7 +282,14 @@ class SubtitleService:
             for subtitle in subtitles:
                 subtitle.processing_status = "processing"
             await self.db.flush()
-            processed = await self._process_subtitle_batch(subtitles, source_language, target_language)
+            await self._report_batch_progress(progress_callback, 0.02)
+            processed = await self._process_subtitle_batch(
+                subtitles,
+                source_language,
+                target_language,
+                progress_callback=progress_callback,
+            )
+            await self._report_batch_progress(progress_callback, 0.98)
             updated = await self.subtitle_repo.update_processed_batch(video_pk, batch_index, processed)
             await self.batch_repo.mark_status(video_pk, batch_index, "completed")
             await self._maybe_complete_video(video)
@@ -195,7 +319,7 @@ class SubtitleService:
             await self.db.rollback()
             await self.batch_repo.mark_status(video_pk, batch_index, "failed")
             await self.subtitle_repo.mark_batch_failed(video_pk, batch_index)
-            await self.video_repo.set_processing_status_by_id(video_pk, "processing")
+            await self.video_repo.set_processing_status_by_id(video_pk, "failed")
             await self.db.commit()
             duration = time.monotonic() - started
             logger.exception(
@@ -226,14 +350,21 @@ class SubtitleService:
         total_batches = len(batches)
         total_subtitles = len(subtitles)
         status = "completed" if total_batches > 0 and processed_batches == total_batches else video.processing_status
+        batch_progress = (processed_batches / total_batches) if total_batches else 0.0
+        persisted_progress = float(video.processing_progress or 0.0)
+        overall_progress = max(persisted_progress, 0.30 + 0.68 * batch_progress) if total_batches else persisted_progress
+        if status == "completed":
+            overall_progress = 1.0
         return SubtitleProcessingProgress(
             video_id=video.youtube_video_id,
             status=status,
+            phase="completed" if status == "completed" else video.processing_phase,
+            phase_progress=overall_progress,
             processed_batches=processed_batches,
             total_batches=total_batches,
             processed_subtitles=processed_subtitles,
             total_subtitles=total_subtitles,
-            progress=(processed_batches / total_batches) if total_batches else 0.0,
+            progress=overall_progress,
         )
 
     async def completed_batch_events(self, youtube_video_id: str) -> list[SubtitleBatchResponse]:
@@ -250,24 +381,37 @@ class SubtitleService:
     async def _process_lines(self, raw_lines: list[RawSubtitle], source_language: str, target_language: str) -> list[dict]:
         normalized = [line for line in raw_lines if line.text]
         translations = await self.translation_provider.translate_batch([line.text for line in normalized], source_language, target_language)
+        texts = [line.text for line in normalized]
+        analyses = await self._analyze_subtitles(texts)
         processed: list[dict] = []
-        for line, translation in zip(normalized, translations, strict=True):
-            located_tokens = locate_tokens(line.text, self.segmentation_provider.segment(line.text))
-            enriched_tokens = await self._enrich_tokens(located_tokens, line.text)
+        for line, translation, analysis in zip(normalized, translations, analyses, strict=True):
+            enriched_tokens = await self._enrich_analyzed_tokens(line.text, analysis)
             translation = self._translation_or_token_gloss(translation, line.text, target_language, enriched_tokens)
             processed.append({"start": line.start, "end": line.end, "text": line.text, "translation": translation, "tokens": enriched_tokens})
         return processed
 
-    async def _process_subtitle_batch(self, subtitles: list[Subtitle], source_language: str, target_language: str) -> list[dict]:
+    async def _process_subtitle_batch(
+        self,
+        subtitles: list[Subtitle],
+        source_language: str,
+        target_language: str,
+        progress_callback: BatchProgressCallback | None = None,
+    ) -> list[dict]:
         normalized = [subtitle for subtitle in subtitles if subtitle.text]
         translations: list[str] = []
-        for start in range(0, len(normalized), settings.translation_batch_size):
+        translation_starts = list(range(0, len(normalized), settings.translation_batch_size))
+        for chunk_index, start in enumerate(translation_starts):
             chunk = normalized[start : start + settings.translation_batch_size]
             translations.extend(await self.translation_provider.translate_batch([subtitle.text for subtitle in chunk], source_language, target_language))
+            await self._report_batch_progress(
+                progress_callback,
+                0.05 + 0.35 * ((chunk_index + 1) / max(len(translation_starts), 1)),
+            )
+        texts = [subtitle.text for subtitle in normalized]
+        analyses = await self._analyze_subtitles(texts, progress_callback=progress_callback)
         processed: list[dict] = []
-        for subtitle, translation in zip(normalized, translations, strict=True):
-            located_tokens = locate_tokens(subtitle.text, self.segmentation_provider.segment(subtitle.text))
-            enriched_tokens = await self._enrich_tokens(located_tokens, subtitle.text)
+        for index, (subtitle, translation, analysis) in enumerate(zip(normalized, translations, analyses, strict=True)):
+            enriched_tokens = await self._enrich_analyzed_tokens(subtitle.text, analysis)
             translation = self._translation_or_token_gloss(translation, subtitle.text, target_language, enriched_tokens)
             processed.append(
                 {
@@ -278,17 +422,74 @@ class SubtitleService:
                     "translation": translation,
                     "tokens": enriched_tokens,
                 }
-        )
+            )
+            await self._report_batch_progress(
+                progress_callback,
+                0.8 + 0.16 * ((index + 1) / max(len(normalized), 1)),
+            )
         return processed
 
-    async def _enrich_tokens(self, located_tokens: list[dict], context: str) -> list[dict]:
+    async def _analyze_subtitles(
+        self,
+        texts: list[str],
+        progress_callback: BatchProgressCallback | None = None,
+    ) -> list[list[SubtitleTokenAnalysis]]:
+        if self.subtitle_nlp_provider is not None:
+            analyses: list[list[SubtitleTokenAnalysis]] = []
+            analysis_starts = list(range(0, len(texts), settings.translation_batch_size))
+            for chunk_index, start in enumerate(analysis_starts):
+                analyses.extend(
+                    await self.subtitle_nlp_provider.analyze_batch(
+                        texts[start : start + settings.translation_batch_size]
+                    )
+                )
+                await self._report_batch_progress(
+                    progress_callback,
+                    0.4 + 0.4 * ((chunk_index + 1) / max(len(analysis_starts), 1)),
+                )
+            return analyses
+
+        segmented = self.segmentation_provider.segment_batch(texts)
+        sentence_pinyins = self.pronunciation_provider.pinyin_batch(texts)
+        analyses = [
+            [
+                SubtitleTokenAnalysis(
+                    text=token["text"],
+                    pinyin=token_pinyin(sentence_pinyin, token["start_index"], token["end_index"]),
+                )
+                for token in locate_tokens(text, tokens)
+            ]
+            for text, tokens, sentence_pinyin in zip(texts, segmented, sentence_pinyins, strict=True)
+        ]
+        await self._report_batch_progress(progress_callback, 0.8)
+        return analyses
+
+    async def _report_batch_progress(self, callback: BatchProgressCallback | None, progress: float) -> None:
+        if callback is not None:
+            await callback(min(max(progress, 0.0), 0.99))
+
+    async def _enrich_analyzed_tokens(self, context: str, analysis: list[SubtitleTokenAnalysis]) -> list[dict]:
+        located_tokens = locate_tokens(context, [token.text for token in analysis])
+        pinyin_by_position = {
+            (token["start_index"], token["end_index"]): analyzed.pinyin
+            for token, analyzed in zip(located_tokens, analysis, strict=True)
+        }
+        return await self._enrich_tokens(located_tokens, context, pinyin_by_position)
+
+    async def _enrich_tokens(
+        self,
+        located_tokens: list[dict],
+        context: str,
+        pinyin_by_position: dict[tuple[int, int], str | None],
+    ) -> list[dict]:
         enriched_tokens = []
         for token in located_tokens:
+            contextual_pinyin = pinyin_by_position.get((token["start_index"], token["end_index"]))
             if self.dictionary_provider is None:
-                enriched_tokens.append({**token, "pinyin": self._to_pinyin(token["text"]), "meaning": None})
+                enriched_tokens.append({**token, "pinyin": contextual_pinyin, "meaning": None})
                 continue
             entry = await self.dictionary_provider.lookup(token["text"], context=context)
-            enriched_tokens.append({**token, "pinyin": entry.pinyin, "meaning": entry.meaning})
+            enriched_tokens.append({**token, "pinyin": contextual_pinyin or entry.pinyin, "meaning": entry.meaning})
         return enriched_tokens
 
     def _translation_or_token_gloss(self, translation: str, source_text: str, target_language: str, tokens: list[dict]) -> str:
@@ -335,14 +536,7 @@ class SubtitleService:
         batches = await self.batch_repo.list_for_video(video.id)
         if batches and all(batch.status == "completed" for batch in batches):
             await self.video_repo.set_processing_status(video, "completed")
-
-    def _to_pinyin(self, word: str) -> str:
-        try:
-            from pypinyin import Style, lazy_pinyin
-
-            return " ".join(lazy_pinyin(word, style=Style.TONE))
-        except Exception:
-            return ""
+            await self.video_repo.set_processing_phase(video, "completed", 1.0)
 
     def _response_from_video(self, video: Video) -> SubtitleListResponse:
         subtitles = sorted(video.subtitles, key=lambda item: item.sequence_number)

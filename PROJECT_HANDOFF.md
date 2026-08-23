@@ -157,6 +157,27 @@ Important behavior:
 - Already processed videos may still have old translations in PostgreSQL/Redis.
 - To force OpenAI translation for an old video, delete that video in the UI and import it again, or manually clear/reprocess its batches.
 
+## OpenAI Subtitle NLP
+
+Subtitle segmentation and contextual pinyin now come from `OpenAISubtitleNLPProvider` in
+`backend/app/services/subtitle_nlp_service.py`. It sends up to 30 subtitle sentences per request to the Responses
+API with a strict JSON Schema, validates sentence IDs/token coverage/pinyin, retries once, then falls back to
+Jieba + `pypinyin` if OpenAI is unavailable. Redis caches each NLP batch and PostgreSQL stores the final tokens.
+
+```env
+SUBTITLE_NLP_PROVIDER=openai
+OPENAI_NLP_MODEL=gpt-4o-mini
+VIDEO_TOPIC_CLASSIFIER_PROVIDER=openai
+OPENAI_TOPIC_MODEL=gpt-4o-mini
+```
+
+HanLP, G2PW, their model volumes, optional requirements, and Docker build flags are no longer used. Existing
+processed videos must be reprocessed to receive the new OpenAI tokenization and contextual pinyin.
+
+Video imports with no manual topics are classified in the background by `OpenAIVideoTopicClassifier` using the title
+and up to 20 subtitle lines. It writes one primary and up to two secondary subjects to `videos.tags`. Existing/manual
+topics win, and OpenAI failure does not fail the video import.
+
 ## Subtitle Processing Notes
 
 Relevant backend files:

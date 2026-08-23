@@ -36,6 +36,8 @@ class SubtitleBatchResponse(BaseModel):
 class SubtitleProcessingProgress(BaseModel):
     video_id: str
     status: str
+    phase: str = "pending"
+    phase_progress: float = 0.0
     processed_batches: int
     total_batches: int
     processed_subtitles: int

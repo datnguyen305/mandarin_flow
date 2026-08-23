@@ -7,6 +7,9 @@ class SegmentationProvider(ABC):
     def segment(self, text: str) -> list[str]:
         raise NotImplementedError
 
+    def segment_batch(self, texts: list[str]) -> list[list[str]]:
+        return [self.segment(text) for text in texts]
+
 
 class JiebaSegmentationProvider(SegmentationProvider):
     def __init__(self) -> None:
@@ -41,6 +44,14 @@ class JiebaSegmentationProvider(SegmentationProvider):
                 tokens.append(text[index])
                 index += 1
         return tokens
+
+
+def filter_tokens(tokens: list[str]) -> list[str]:
+    return [
+        token
+        for token in tokens
+        if token.strip() and any(not unicodedata.category(char).startswith("P") for char in token)
+    ]
 
 
 def locate_tokens(text: str, tokens: list[str]) -> list[dict]:

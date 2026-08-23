@@ -52,7 +52,7 @@ func (db *Postgres) TouchGuest(ctx context.Context, id string, now time.Time) er
 }
 
 func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublished bool) ([]domain.Video, error) {
-	query := `SELECT id,youtube_video_id,title,url,thumbnail_url,language,processing_status,created_at FROM videos`
+	query := `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos`
 	args := []any{}
 	if !includeUnpublished {
 		query += ` WHERE processing_status='completed'`
@@ -67,7 +67,7 @@ func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublishe
 	result := []domain.Video{}
 	for rows.Next() {
 		var item domain.Video
-		if err := rows.Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.Language, &item.ProcessingStatus, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -77,7 +77,7 @@ func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublishe
 
 func (db *Postgres) GetVideo(ctx context.Context, videoID string) (*domain.Video, error) {
 	var item domain.Video
-	err := db.pool.QueryRow(ctx, `SELECT id,youtube_video_id,title,url,thumbnail_url,language,processing_status,created_at FROM videos WHERE youtube_video_id=$1`, videoID).Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.Language, &item.ProcessingStatus, &item.CreatedAt)
+	err := db.pool.QueryRow(ctx, `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos WHERE youtube_video_id=$1`, videoID).Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -181,4 +181,23 @@ func (db *Postgres) ListVocabulary(ctx context.Context, guestID string) ([]domai
 func (db *Postgres) DeleteVocabulary(ctx context.Context, guestID string, id int64) error {
 	_, err := db.pool.Exec(ctx, `DELETE FROM saved_vocabulary WHERE id=$1 AND guest_id=$2::uuid`, id, guestID)
 	return err
+}
+
+func (db *Postgres) LookupNormalizedDictionary(ctx context.Context, word string) (*domain.NormalizedDictionaryEntry, error) {
+	var entry domain.NormalizedDictionaryEntry
+	err := db.pool.QueryRow(ctx, `
+		SELECT simplified, traditional, readings_json, hsk_level
+		FROM normalized_dictionary_entries
+		WHERE status IN ('validated', 'source_only')
+		  AND entry_type='lexical'
+		  AND (simplified=$1 OR traditional=$1)
+		ORDER BY CASE WHEN status='validated' THEN 0 ELSE 1 END,
+		         CASE WHEN simplified=$1 THEN 0 ELSE 1 END,
+		         updated_at DESC
+		LIMIT 1
+	`, word).Scan(&entry.Simplified, &entry.Traditional, &entry.Readings, &entry.HSKLevel)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &entry, err
 }

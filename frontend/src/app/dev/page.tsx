@@ -3,22 +3,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Cookie, KeyRound, Loader2, Play, Trash2, Upload, Youtube } from "lucide-react";
+import { CheckCircle2, ChevronDown, Cookie, KeyRound, Loader2, Play, Tag, Trash2, Upload, Youtube } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { deleteVideo, listVideos, processVideo, uploadYouTubeCookies } from "@/lib/api";
+import { ImportChatbot } from "@/components/ImportChatbot";
+import { ApiRequestError, deleteVideo, DevAccessError, getProcessingProgress, listVideos, NetworkRequestError, processVideo, uploadYouTubeCookies, verifyDevAccess } from "@/lib/api";
 import { clearDevToken, readDevToken, writeDevToken } from "@/lib/devAuth";
 import {
   IMPORT_PROCESSING_EVENT,
-  readImportProcessingTask,
-  removeImportProcessingTask,
+  createImportProcessingJob,
+  friendlyProgressMessage,
+  mergeServerProgress,
+  readImportProcessingJob,
+  removeImportProcessingJob,
   stepIndexForProgress,
-  writeImportProcessingTask,
-  type ImportProcessingTask,
+  writeImportProcessingJob,
+  type PersistedImportJob,
+  type ProcessingUiState,
 } from "@/lib/importProcessing";
 import { extractYouTubeId } from "@/lib/subtitles";
+import { formatVideoDuration } from "@/lib/videoCatalog";
+import { getPreferredYouTubeThumbnail } from "@/lib/youtubeThumbnail";
 import type { ImportedVideo, ProcessingProgress } from "@/types";
 
-const processSteps = ["Tách ID", "Lấy phụ đề/ASR", "Tách từ & Pinyin", "Dịch Việt", "Lưu ngữ cảnh"];
+const processSteps = ["Tách ID", "Lấy phụ đề/ASR", "Dịch Việt", "Tách từ & Pinyin", "Lưu ngữ cảnh"];
 
 function formatImportedDate(value: string): string {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -37,23 +44,32 @@ export default function DevPage() {
   const [devToken, setDevToken] = useState<string | null>(() => readDevToken());
   const [tokenInput, setTokenInput] = useState("");
   const [url, setUrl] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [processingState, setProcessingState] = useState<ProcessingUiState>("idle");
+  const [activeJob, setActiveJob] = useState<PersistedImportJob | null>(null);
   const [progress, setProgress] = useState<ProcessingProgress | null>(null);
-  const [processingMessage, setProcessingMessage] = useState("Sẵn sàng xử lý video.");
   const [cookies, setCookies] = useState("");
   const [cookiesStatus, setCookiesStatus] = useState<string | null>(null);
   const [cookiesLoading, setCookiesLoading] = useState(false);
   const [videos, setVideos] = useState<ImportedVideo[]>([]);
   const [videosLoading, setVideosLoading] = useState(false);
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+  const [devLoginLoading, setDevLoginLoading] = useState(false);
 
   const refreshVideos = useCallback(async (token: string | null) => {
     if (!token) return;
     setVideosLoading(true);
     try {
+      await verifyDevAccess(token);
       setVideos(await listVideos(100, token));
     } catch (exc) {
+      if (exc instanceof DevAccessError) {
+        clearDevToken();
+        setDevToken(null);
+        setError("Mã dev không hợp lệ hoặc đã được thay đổi. Vui lòng đăng nhập lại.");
+        return;
+      }
       setError(exc instanceof Error ? exc.message : "Không thể tải danh sách video dev.");
     } finally {
       setVideosLoading(false);
@@ -61,27 +77,25 @@ export default function DevPage() {
   }, []);
 
   useEffect(() => {
-    function syncProcessingTask() {
-      const task = readImportProcessingTask();
-      if (!task) return;
-      setUrl(task.url);
-      setProgress(task.progress);
-      setProcessingMessage(task.message);
-      setError(task.error ?? null);
-      setLoading(task.progress.status === "pending" || task.progress.status === "processing");
-
-      if (redirectOnCompleteRef.current && task.progress.status === "completed") {
+    function syncProcessingJob() {
+      const job = readImportProcessingJob();
+      if (!job) {
+        setActiveJob(null);
+        setProgress(null);
+        setError(null);
+        setProcessingState((current) => current === "starting" ? current : "idle");
         redirectOnCompleteRef.current = false;
-        refreshVideos(readDevToken());
-        if (redirectTimerRef.current != null) window.clearTimeout(redirectTimerRef.current);
-        redirectTimerRef.current = window.setTimeout(() => router.push(`/watch?v=${task.videoId}`), 650);
+        return;
       }
+      setActiveJob(job);
+      setUrl(job.url);
+      setProcessingState("processing");
     }
 
-    syncProcessingTask();
-    window.addEventListener(IMPORT_PROCESSING_EVENT, syncProcessingTask);
+    syncProcessingJob();
+    window.addEventListener(IMPORT_PROCESSING_EVENT, syncProcessingJob);
     return () => {
-      window.removeEventListener(IMPORT_PROCESSING_EVENT, syncProcessingTask);
+      window.removeEventListener(IMPORT_PROCESSING_EVENT, syncProcessingJob);
       if (redirectTimerRef.current != null) window.clearTimeout(redirectTimerRef.current);
     };
   }, [refreshVideos, router]);
@@ -92,13 +106,119 @@ export default function DevPage() {
     return () => window.clearTimeout(timer);
   }, [devToken, refreshVideos]);
 
-  function handleDevLogin(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    const activeVideoId = activeJob?.videoId;
+    if (!activeVideoId) return;
+    const videoId: string = activeVideoId;
+    let cancelled = false;
+    let inFlight = false;
+    let timer: number | null = null;
+    let latestProgress: ProcessingProgress | null = null;
+
+    function finishCompleted(nextProgress: ProcessingProgress) {
+      const completedProgress = { ...nextProgress, status: "completed" as const, phase: "completed", progress: 1 };
+      setProgress(completedProgress);
+      setProcessingState("completed");
+      setError(null);
+      setActiveJob(null);
+      removeImportProcessingJob(false);
+      refreshVideos(readDevToken());
+      if (redirectOnCompleteRef.current) {
+        redirectOnCompleteRef.current = false;
+        if (redirectTimerRef.current != null) window.clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = window.setTimeout(() => router.push(`/watch?v=${videoId}`), 450);
+      }
+    }
+
+    function finishFailed(message: string, nextProgress?: ProcessingProgress) {
+      if (nextProgress) setProgress(nextProgress);
+      setProcessingState("failed");
+      setError(message);
+      redirectOnCompleteRef.current = false;
+      setActiveJob(null);
+      removeImportProcessingJob(false);
+    }
+
+    function clearMissingJob() {
+      setActiveJob(null);
+      setProgress(null);
+      setError(null);
+      setProcessingState("idle");
+      redirectOnCompleteRef.current = false;
+      removeImportProcessingJob(false);
+    }
+
+    async function poll() {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const serverProgress = await getProcessingProgress(videoId);
+        if (cancelled) return;
+
+        latestProgress = mergeServerProgress(latestProgress, serverProgress);
+        const nextProgress = latestProgress;
+        setProgress(nextProgress);
+
+        if (nextProgress.status === "completed") {
+          finishCompleted(nextProgress);
+          return;
+        }
+        if (nextProgress.status === "failed") {
+          finishFailed("Xử lý video bị lỗi. Bạn có thể thử import lại.", nextProgress);
+          return;
+        }
+        setProcessingState("processing");
+        setError(null);
+      } catch (exc) {
+        if (cancelled) return;
+        if (exc instanceof ApiRequestError && exc.status === 404) {
+          clearMissingJob();
+          return;
+        }
+        if (!(exc instanceof NetworkRequestError)) {
+          setError(exc instanceof Error ? exc.message : "Không thể theo dõi tiến trình xử lý.");
+        }
+      } finally {
+        inFlight = false;
+        if (!cancelled) {
+          timer = window.setTimeout(poll, 2500);
+        }
+      }
+    }
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [activeJob?.videoId, refreshVideos, router]);
+
+  function clearProcessingState() {
+    if (redirectTimerRef.current != null) window.clearTimeout(redirectTimerRef.current);
+    redirectOnCompleteRef.current = false;
+    removeImportProcessingJob(false);
+    setActiveJob(null);
+    setProgress(null);
+    setError(null);
+    setProcessingState("cancelled");
+  }
+
+  async function handleDevLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = tokenInput.trim();
     if (!trimmed) return;
-    writeDevToken(trimmed);
-    setDevToken(trimmed);
-    setTokenInput("");
+    setError(null);
+    setDevLoginLoading(true);
+    try {
+      await verifyDevAccess(trimmed);
+      writeDevToken(trimmed);
+      setDevToken(trimmed);
+      setTokenInput("");
+    } catch (exc) {
+      setError(exc instanceof DevAccessError ? "Mã dev không đúng." : exc instanceof Error ? exc.message : "Không thể xác thực mã dev.");
+    } finally {
+      setDevLoginLoading(false);
+    }
   }
 
   function handleLogout() {
@@ -111,44 +231,67 @@ export default function DevPage() {
     event.preventDefault();
     if (!devToken) return;
     if (redirectTimerRef.current != null) window.clearTimeout(redirectTimerRef.current);
-    removeImportProcessingTask();
+    clearProcessingState();
     redirectOnCompleteRef.current = false;
     setError(null);
     setProgress(null);
     const localVideoId = extractYouTubeId(url);
     if (!localVideoId) {
       setError("Vui lòng dán một link YouTube hợp lệ.");
-      setProcessingMessage("Sẵn sàng xử lý video.");
       return;
     }
-    setLoading(true);
-    setProcessingMessage("Đang lấy thông tin video và phụ đề thô...");
+    setActiveJob(null);
+    setProcessingState("starting");
+    redirectOnCompleteRef.current = true;
     try {
-      const initialProgress = await processVideo(url, devToken);
-      setProgress(initialProgress);
-      const task: ImportProcessingTask = {
-        videoId: localVideoId,
-        url,
-        progress: initialProgress,
-        message: initialProgress.status === "completed" ? "Đã xử lý xong." : "Đang xử lý phụ đề theo từng batch...",
-        error: null,
-        updatedAt: Date.now(),
-      };
-      writeImportProcessingTask(task);
-      if (initialProgress.status === "completed") {
-        setProcessingMessage("Đã xử lý xong. Đang mở video...");
-        writeImportProcessingTask({ ...task, message: "Đã xử lý xong. Đang mở video.", updatedAt: Date.now() });
-        refreshVideos(devToken);
-        redirectTimerRef.current = window.setTimeout(() => router.push(`/watch?v=${localVideoId}`), 450);
+      const tags = Array.from(
+        new Map(
+          tagsInput
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+            .map((tag) => [tag.toLocaleLowerCase("vi"), tag])
+        ).values()
+      ).slice(0, 10);
+      if (tags.some((tag) => /^https?:\/\//i.test(tag))) {
+        setError("Chủ đề không được là đường dẫn. Hãy nhập chủ đề như Du lịch, Âm nhạc hoặc Hội thoại.");
+        setProcessingState("idle");
         return;
       }
-
-      redirectOnCompleteRef.current = true;
-      setProcessingMessage("Đang xử lý phụ đề theo từng batch...");
+      const initialProgress = await processVideo(url, devToken, tags);
+      const job = createImportProcessingJob(initialProgress.video_id, url);
+      writeImportProcessingJob(job);
+      setActiveJob(job);
+      setProgress(initialProgress);
+      if (initialProgress.status === "completed") {
+        setProcessingState("completed");
+        setActiveJob(null);
+        removeImportProcessingJob(false);
+        refreshVideos(devToken);
+        redirectTimerRef.current = window.setTimeout(() => router.push(`/watch?v=${initialProgress.video_id}`), 450);
+        return;
+      }
+      if (initialProgress.status === "failed") {
+        setProcessingState("failed");
+        setError("Xử lý video bị lỗi. Bạn có thể thử import lại.");
+        setActiveJob(null);
+        removeImportProcessingJob(false);
+        return;
+      }
+      setProcessingState("processing");
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "Không thể xử lý video.");
-      setLoading(false);
-      setProcessingMessage("Sẵn sàng xử lý video.");
+      if (exc instanceof NetworkRequestError) {
+        const job = createImportProcessingJob(localVideoId, url);
+        writeImportProcessingJob(job);
+        setActiveJob(job);
+        setProcessingState("processing");
+        setError(null);
+        return;
+      }
+      const message = exc instanceof Error ? exc.message : "Không thể xử lý video.";
+      redirectOnCompleteRef.current = false;
+      setError(message);
+      setProcessingState("failed");
     }
   }
 
@@ -184,19 +327,35 @@ export default function DevPage() {
       await deleteVideo(video.youtube_video_id, devToken);
       setVideos((current) => current.filter((item) => item.youtube_video_id !== video.youtube_video_id));
     } catch (exc) {
+      if (exc instanceof DevAccessError) {
+        clearDevToken();
+        setDevToken(null);
+        setError("Mã dev không hợp lệ hoặc đã được thay đổi. Vui lòng đăng nhập lại.");
+        return;
+      }
       setError(exc instanceof Error ? exc.message : "Không thể xóa video.");
     } finally {
       setDeletingVideoId(null);
     }
   }
 
-  const progressPercent = Math.max(0, Math.min(100, Math.round((progress?.progress ?? (loading ? 0.08 : 0)) * 100)));
-  const activeStepIndex = stepIndexForProgress(progress, loading);
+  const isProcessing = processingState === "starting" || processingState === "processing";
+  const progressPercent = Math.max(0, Math.min(100, Math.round((progress?.progress ?? 0) * 100)));
+  const activeStepIndex = stepIndexForProgress(progress, processingState);
+  const processingMessage = friendlyProgressMessage(progress, processingState);
   const progressLabel = progress
-    ? `${progress.processed_batches}/${progress.total_batches || 0} batch`
-    : loading
-      ? "Đang chuẩn bị dữ liệu xử lý"
-      : "Chưa bắt đầu";
+    ? progress.total_subtitles > 0
+      ? `${progress.processed_subtitles}/${progress.total_subtitles} câu · ${progressPercent}%`
+      : progress.total_batches > 0
+        ? `${progress.processed_batches}/${progress.total_batches} phần · ${progressPercent}%`
+        : `${progressPercent}%`
+    : processingState === "starting"
+      ? "Đang bắt đầu"
+      : isProcessing
+        ? "Đang kết nối"
+        : "Chưa bắt đầu";
+  const buttonLabel = isProcessing ? "Đang xử lý" : "Bắt đầu xử lý";
+  const canResetTracking = processingState === "processing" || processingState === "starting";
 
   if (!devToken) {
     return (
@@ -218,8 +377,10 @@ export default function DevPage() {
             value={tokenInput}
             onChange={(event) => setTokenInput(event.target.value)}
           />
-          <button className="mt-3 h-11 w-full rounded-xl bg-brand-700 text-sm font-semibold text-cream-50 hover:bg-brand-800" type="submit">
-            Mở công cụ dev
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          <button className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-700 text-sm font-semibold text-cream-50 hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60" disabled={devLoginLoading} type="submit">
+            {devLoginLoading ? <Loader2 className="animate-spin" size={17} /> : null}
+            {devLoginLoading ? "Đang xác thực" : "Mở công cụ dev"}
           </button>
         </form>
       </main>
@@ -258,13 +419,25 @@ export default function DevPage() {
             </div>
             <button
               className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand-700 px-7 text-base font-semibold text-cream-50 shadow-md transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={loading}
+              disabled={isProcessing}
               type="submit"
             >
-              {loading ? <Loader2 className="animate-spin" size={19} /> : <Play size={19} />}
-              {loading ? "Đang xử lý" : "Bắt đầu xử lý"}
+              {isProcessing ? <Loader2 className="animate-spin" size={19} /> : <Play size={19} />}
+              {buttonLabel}
             </button>
           </div>
+          <label className="mt-2 flex min-h-12 items-center gap-3 rounded-xl bg-cream-100/60 px-4 text-sm text-slate-600" htmlFor="video-tags">
+            <Tag className="shrink-0 text-brand-700" size={18} />
+            <span className="shrink-0 font-semibold text-slate-700">Chủ đề</span>
+            <input
+              className="w-full bg-transparent py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              id="video-tags"
+              placeholder="Không bắt buộc - ví dụ: Du lịch, Ẩm thực, Hội thoại"
+              autoComplete="off"
+              value={tagsInput}
+              onChange={(event) => setTagsInput(event.target.value)}
+            />
+          </label>
           <div className="mt-3 overflow-hidden rounded-full bg-cream-200">
             <div
               className={`h-3 rounded-full transition-all duration-500 ${progress?.status === "failed" ? "bg-red-500" : "bg-brand-700"}`}
@@ -273,7 +446,14 @@ export default function DevPage() {
           </div>
           <div className="mt-3 flex flex-col gap-1 px-1 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <span className="font-medium text-slate-600">{processingMessage}</span>
-            <span>{progressLabel}</span>
+            <span className="flex items-center gap-3">
+              <span>{progressLabel}</span>
+              {canResetTracking ? (
+                <button className="font-semibold text-slate-500 underline-offset-4 hover:text-brand-700 hover:underline" onClick={clearProcessingState} type="button">
+                  Dừng theo dõi
+                </button>
+              ) : null}
+            </span>
           </div>
           {error ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
         </form>
@@ -352,7 +532,17 @@ export default function DevPage() {
                 <Link href={`/watch?v=${video.youtube_video_id}`} className="block">
                   <div className="relative aspect-video bg-slate-900">
                     {video.thumbnail_url ? (
-                      <Image alt={video.title} className="object-cover" fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" src={video.thumbnail_url} />
+                      <Image
+                        alt={video.title}
+                        className="object-cover"
+                        fill
+                        onError={(event) => {
+                          if (event.currentTarget.src !== video.thumbnail_url) event.currentTarget.src = video.thumbnail_url ?? "";
+                        }}
+                        quality={95}
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        src={getPreferredYouTubeThumbnail(video.youtube_video_id, video.thumbnail_url) ?? video.thumbnail_url}
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center font-serif text-5xl font-bold text-cream-50">汉</div>
                     )}
@@ -377,12 +567,25 @@ export default function DevPage() {
                     <span>{formatImportedDate(video.created_at)}</span>
                     <span className="rounded-full bg-brand-100 px-2 py-1 font-medium text-brand-800">{video.processing_status}</span>
                   </div>
+                  {video.tags.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {video.tags.map((tag) => (
+                        <span className="rounded-full bg-cream-100 px-2 py-1 text-xs font-medium text-slate-600" key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {formatVideoDuration(video.duration_seconds) ? (
+                    <div className="mt-2 text-xs font-medium text-slate-500">
+                      Thời lượng: {formatVideoDuration(video.duration_seconds)}
+                    </div>
+                  ) : null}
                 </div>
               </article>
             ))}
           </div>
         )}
       </section>
+      {devToken ? <ImportChatbot devToken={devToken} /> : null}
     </main>
   );
 }

@@ -1,0 +1,17 @@
+[Unit]
+Description=MandarinFlow approved Firefox cookie exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace this path with the absolute path to youtube-language-learning.
+WorkingDirectory=/ABSOLUTE/PATH/youtube-language-learning
+# The environment file must be chmod 600 and contain DEV_ACCESS_TOKEN=...
+EnvironmentFile=/ABSOLUTE/PATH/youtube-language-learning/.env.cookie-helper
+ExecStart=/usr/bin/env python scripts/cookie_export_helper.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

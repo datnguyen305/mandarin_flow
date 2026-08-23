@@ -7,9 +7,9 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app import models  # noqa: F401 - import model modules before reading Base.metadata
 from app.core.config import settings
 from app.db.base import Base
-from app.models import dictionary_enrichment, guest, guest_video_progress, subtitle, subtitle_token, video, vocabulary
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

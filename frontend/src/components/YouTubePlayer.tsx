@@ -31,6 +31,5 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     dispatchGlobalPlayerCommand({ type: "load", videoId, startTime });
   }, [videoId, startTime]);
 
-  return <div className="aspect-video w-full overflow-hidden rounded-md bg-black" id={GLOBAL_PLAYER_ANCHOR_ID} />;
+  return <div className="h-full w-full overflow-hidden rounded-md bg-black" id={GLOBAL_PLAYER_ANCHOR_ID} />;
 });
-

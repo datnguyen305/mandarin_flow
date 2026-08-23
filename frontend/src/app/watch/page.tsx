@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Clock, Loader2, Search, RotateCcw, Languages } from "lucide-react";
@@ -14,12 +14,28 @@ import type { DictionaryEntry, SubtitleBatch, SubtitleLine, SubtitleToken } from
 const LAST_WATCH_HREF_KEY = "fluentmandarin:last-watch-href";
 const FLOATING_VIDEO_HIDDEN_KEY = "fluentmandarin:floating-video-hidden";
 const SUBTITLE_SCRIPT_KEY = "fluentmandarin:subtitle-script";
+const WATCH_LAYOUT_KEY = "mandarinflow:watch-layout";
+
+const DEFAULT_WATCH_LAYOUT: WatchLayout = {
+  leftWidth: 52,
+  videoHeight: 58,
+};
+
+interface WatchLayout {
+  leftWidth: number;
+  videoHeight: number;
+}
+
+type ResizeAxis = "vertical" | "horizontal";
 
 function WatchContent() {
   const searchParams = useSearchParams();
   const videoId = searchParams.get("v") ?? "";
   const startTime = Number(searchParams.get("t") ?? 0);
   const playerRef = useRef<YouTubePlayerHandle | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const leftColumnRef = useRef<HTMLElement | null>(null);
+  const layoutRef = useRef<WatchLayout>(DEFAULT_WATCH_LAYOUT);
   const [subtitles, setSubtitles] = useState<SubtitleLine[]>([]);
   const [title, setTitle] = useState<string>("");
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -34,13 +50,24 @@ function WatchContent() {
   const [selectedSubtitle, setSelectedSubtitle] = useState<SubtitleLine | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"words" | "transcript">("words");
   const [subtitleScript, setSubtitleScript] = useState<ChineseScript>("simplified");
+  const [watchLayout, setWatchLayout] = useState<WatchLayout>(DEFAULT_WATCH_LAYOUT);
   const lastPlaybackPostRef = useRef({ time: -1, sentAt: 0 });
   const transcriptItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const transcriptPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const savedScript = window.localStorage.getItem(SUBTITLE_SCRIPT_KEY);
     if (savedScript !== "simplified" && savedScript !== "traditional") return;
     const timer = window.setTimeout(() => setSubtitleScript(savedScript), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const saved = readWatchLayout();
+    layoutRef.current = saved;
+    workspaceRef.current?.style.setProperty("--watch-left-width", `${saved.leftWidth}%`);
+    workspaceRef.current?.style.setProperty("--watch-video-height", `${saved.videoHeight}%`);
+    const timer = window.setTimeout(() => setWatchLayout(saved), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -56,6 +83,71 @@ function WatchContent() {
   function handleScriptChange(script: ChineseScript) {
     setSubtitleScript(script);
     window.localStorage.setItem(SUBTITLE_SCRIPT_KEY, script);
+  }
+
+  function applyWatchLayout(next: WatchLayout) {
+    layoutRef.current = next;
+    workspaceRef.current?.style.setProperty("--watch-left-width", `${next.leftWidth}%`);
+    workspaceRef.current?.style.setProperty("--watch-video-height", `${next.videoHeight}%`);
+  }
+
+  function persistWatchLayout() {
+    const next = layoutRef.current;
+    setWatchLayout(next);
+    window.localStorage.setItem(WATCH_LAYOUT_KEY, JSON.stringify(next));
+  }
+
+  function resetWatchLayout() {
+    applyWatchLayout(DEFAULT_WATCH_LAYOUT);
+    persistWatchLayout();
+  }
+
+  function nudgeResize(axis: ResizeAxis, delta: number) {
+    const current = layoutRef.current;
+    const next = axis === "vertical"
+      ? { ...current, leftWidth: clamp(current.leftWidth + delta, 40, 70) }
+      : { ...current, videoHeight: clamp(current.videoHeight + delta, 35, 75) };
+    applyWatchLayout(next);
+    persistWatchLayout();
+  }
+
+  function beginResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (window.matchMedia("(max-width: 1023px)").matches) return;
+    event.preventDefault();
+    const startLayout = { ...layoutRef.current };
+    const workspace = workspaceRef.current;
+    const leftColumn = leftColumnRef.current;
+    if (!workspace || !leftColumn) return;
+
+    const workspaceRect = workspace.getBoundingClientRect();
+    const leftRect = leftColumn?.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      if (!leftRect) return;
+      const horizontalDelta = ((moveEvent.clientX - startX) / workspaceRect.width) * 100;
+      const verticalDelta = ((moveEvent.clientY - startY) / leftRect.height) * 100;
+      applyWatchLayout({
+        leftWidth: clamp(startLayout.leftWidth + horizontalDelta, 40, 70),
+        videoHeight: clamp(startLayout.videoHeight + verticalDelta, 35, 75),
+      });
+    }
+
+    function finishResize() {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", finishResize);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+      persistWatchLayout();
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", finishResize, { once: true });
   }
 
   useEffect(() => {
@@ -131,10 +223,13 @@ function WatchContent() {
 
   useEffect(() => {
     if (sidebarTab !== "transcript" || !activeSubtitle) return;
-    transcriptItemRefs.current.get(subtitleDomKey(activeSubtitle))?.scrollIntoView({
-      block: "center",
-      behavior: "smooth",
-    });
+    const panel = transcriptPanelRef.current;
+    const item = transcriptItemRefs.current.get(subtitleDomKey(activeSubtitle));
+    if (!panel || !item) return;
+
+    const itemCenter = item.offsetTop + item.offsetHeight / 2;
+    const targetTop = Math.max(0, itemCenter - panel.clientHeight / 2);
+    panel.scrollTo({ top: targetTop, behavior: "smooth" });
   }, [activeSubtitle, sidebarTab]);
 
   async function handleTokenClick(token: SubtitleToken, subtitle: SubtitleLine) {
@@ -146,7 +241,7 @@ function WatchContent() {
     if (!token.text) return;
     setDictionaryLoading(true);
     try {
-      const entry = await lookupWord(token.text, subtitle.text);
+      const entry = await lookupWord(token.text, subtitle.text, token.pinyin);
       setDictionaryEntry(entry);
     } catch (exc) {
       setDictionaryError(exc instanceof Error ? exc.message : "Không thể tra từ này.");
@@ -181,11 +276,23 @@ function WatchContent() {
   }
 
   return (
-    <main className="mx-auto grid h-[calc(100vh-49px)] max-h-[calc(100vh-49px)] max-w-[1600px] grid-cols-1 gap-3 overflow-hidden px-3 py-2 lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.95fr)]">
-      <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
-        <div className="w-full overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-lg">
-          <div className="aspect-video">
-            <YouTubePlayer ref={playerRef} videoId={videoId} startTime={startTime} />
+    <main
+      className="relative mx-auto grid h-[calc(100vh-49px)] max-h-[calc(100vh-49px)] max-w-[1600px] grid-cols-1 gap-3 overflow-y-auto px-3 py-2 lg:grid-cols-[minmax(0,var(--watch-left-width))_minmax(0,1fr)] lg:gap-2 lg:overflow-hidden"
+      ref={workspaceRef}
+      style={{
+        "--watch-left-width": `${watchLayout.leftWidth}%`,
+        "--watch-video-height": `${watchLayout.videoHeight}%`,
+      } as CSSProperties}
+    >
+      <section
+        className="grid min-h-0 grid-rows-[auto_auto] gap-3 overflow-visible lg:grid-rows-[minmax(0,var(--watch-video-height))_minmax(0,1fr)] lg:gap-2 lg:overflow-hidden"
+        ref={leftColumnRef}
+      >
+        <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-lg">
+          <div className="flex min-h-0 flex-1 items-center justify-center bg-black">
+            <div className="aspect-video h-full w-auto max-w-full">
+              <YouTubePlayer ref={playerRef} videoId={videoId} startTime={startTime} />
+            </div>
           </div>
           <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-t border-cream-200 px-2.5">
             <div className="min-w-0">
@@ -205,6 +312,16 @@ function WatchContent() {
                   Replay
                 </button>
               ) : null}
+              <button
+                aria-label="Đặt lại kích thước layout"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-cream-300 bg-cream-100 px-2 text-[11px] text-slate-700 hover:bg-cream-200"
+                onClick={resetWatchLayout}
+                title="Đặt lại kích thước layout"
+                type="button"
+              >
+                <RotateCcw size={13} />
+                Layout
+              </button>
               <Link className="inline-flex h-7 items-center gap-1 rounded-md bg-brand-700 px-2 text-[11px] font-semibold text-cream-50 hover:bg-brand-800" href="/vocabulary">
                 <BookOpen size={13} />
                 Wordbank
@@ -307,7 +424,7 @@ function WatchContent() {
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3" ref={transcriptPanelRef}>
           {sidebarTab === "words" ? (
             <div className="space-y-2">
               {(activeSubtitle?.tokens ?? []).map((token, index) => (
@@ -366,6 +483,29 @@ function WatchContent() {
         </div>
         </aside>
       </section>
+      <div className="pointer-events-none absolute inset-x-3 bottom-2 top-2 z-20 hidden lg:block">
+        <div
+          aria-label="Điều chỉnh kích thước ba khu vực video"
+          aria-orientation="vertical"
+          aria-valuemax={70}
+          aria-valuemin={40}
+          aria-valuenow={watchLayout.leftWidth}
+          className="pointer-events-auto absolute h-12 w-3 -translate-x-1/2 -translate-y-1/2 cursor-col-resize touch-none rounded-sm focus:outline-none focus:ring-2 focus:ring-brand-200"
+          onDoubleClick={resetWatchLayout}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") nudgeResize("vertical", -2);
+            if (event.key === "ArrowRight") nudgeResize("vertical", 2);
+            if (event.key === "ArrowUp") nudgeResize("horizontal", -2);
+            if (event.key === "ArrowDown") nudgeResize("horizontal", 2);
+          }}
+          onPointerDown={beginResize}
+          role="separator"
+          style={{ left: `calc(${watchLayout.leftWidth}% + 4px)`, top: `calc(${watchLayout.videoHeight}% + 4px)` }}
+          tabIndex={0}
+          title="Kéo điểm giữa để điều chỉnh cả ba khu vực"
+        >
+        </div>
+      </div>
       {selectedToken ? (
         <DictionaryPanel
           token={selectedToken}
@@ -394,6 +534,28 @@ function saveLastWatchHref(videoId: string, currentTime = 0) {
   window.localStorage.setItem(LAST_WATCH_HREF_KEY, `/watch?${params.toString()}`);
   window.localStorage.removeItem(FLOATING_VIDEO_HIDDEN_KEY);
   window.dispatchEvent(new Event("last-watch-updated"));
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readWatchLayout(): WatchLayout {
+  if (typeof window === "undefined") return DEFAULT_WATCH_LAYOUT;
+  try {
+    const raw = window.localStorage.getItem(WATCH_LAYOUT_KEY);
+    if (!raw) return DEFAULT_WATCH_LAYOUT;
+    const value = JSON.parse(raw) as Partial<WatchLayout>;
+    if (!Number.isFinite(value.leftWidth) || !Number.isFinite(value.videoHeight)) {
+      return DEFAULT_WATCH_LAYOUT;
+    }
+    return {
+      leftWidth: clamp(value.leftWidth ?? DEFAULT_WATCH_LAYOUT.leftWidth, 40, 70),
+      videoHeight: clamp(value.videoHeight ?? DEFAULT_WATCH_LAYOUT.videoHeight, 35, 75),
+    };
+  } catch {
+    return DEFAULT_WATCH_LAYOUT;
+  }
 }
 
 function subtitleDomKey(subtitle: SubtitleLine): string {

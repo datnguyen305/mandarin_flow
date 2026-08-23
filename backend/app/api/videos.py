@@ -1,7 +1,8 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +30,13 @@ async def process_video(
     _: None = Depends(require_dev_access),
 ) -> ProcessVideoResponse:
     service = build_subtitle_service(db, cache)
-    progress = await service.prepare_video(str(payload.url), payload.source_language, payload.target_language)
+    progress = await service.prepare_video(
+        str(payload.url),
+        payload.source_language,
+        payload.target_language,
+        payload.tags,
+        defer_content_preparation=True,
+    )
     if progress.status != "completed":
         await subtitle_processing_queue.enqueue_video(progress.video_id)
     return ProcessVideoResponse(**progress.model_dump())
@@ -69,6 +76,60 @@ async def upload_youtube_cookies(payload: CookiesUploadRequest, _: None = Depend
 async def get_video(video_id: str, db: AsyncSession = Depends(get_db)) -> VideoResponse:
     video = await VideoService(db).get_by_youtube_id(video_id)
     return VideoResponse.model_validate(video)
+
+
+@router.get("/{video_id}/processing-progress")
+async def get_video_processing_progress(
+    video_id: str,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    cache: RedisCache = Depends(get_cache),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await build_subtitle_service(db, cache).progress_for_youtube_id(video_id)
+
+
+@router.get("/{video_id}/processing-stream")
+async def stream_video_processing(video_id: str) -> StreamingResponse:
+    """Stream lightweight progress events without replaying subtitle payloads."""
+
+    async def events() -> AsyncGenerator[str, None]:
+        progress = None
+        for _ in range(30):
+            async with AsyncSessionLocal() as db:
+                service = build_subtitle_service(db, RedisCache(None))
+                try:
+                    progress = await service.progress_for_youtube_id(video_id)
+                except SubtitlesUnavailableError:
+                    pass
+            if progress is not None:
+                break
+            yield format_sse("heartbeat", {"video_id": video_id})
+            await asyncio.sleep(1)
+
+        if progress is None:
+            yield format_sse("processing_failed", {"video_id": video_id, "message": "Video import did not start."})
+            return
+
+        yield format_sse("processing_progress", progress.model_dump(), event_id=f"{video_id}:progress")
+        if progress.status == "completed":
+            yield format_sse("processing_completed", {"video_id": video_id}, event_id=f"{video_id}:completed")
+            return
+        if progress.status == "failed":
+            yield format_sse("processing_failed", {"video_id": video_id, "message": "Subtitle processing failed."})
+            return
+
+        async for message in subtitle_event_broker.subscribe(video_id):
+            if message["event"] in {"processing_progress", "processing_completed", "processing_failed", "heartbeat"}:
+                yield format_sse(message["event"], message["data"])
+            if message["event"] in {"processing_completed", "processing_failed"}:
+                return
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -122,7 +183,11 @@ async def stream_video_subtitles(video_id: str) -> StreamingResponse:
         async for message in subtitle_event_broker.subscribe(video_id):
             yield format_sse(message["event"], message["data"])
 
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/{video_id}/playback-position", status_code=status.HTTP_202_ACCEPTED)

@@ -32,6 +32,34 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestDevAccessVerification(t *testing.T) {
+	legacyURL, err := url.Parse("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := newHandler(config.Config{
+		LegacyBackendURL: legacyURL,
+		FrontendURL:      "https://mandarinflow.online",
+		DevAccessToken:   "dev-secret",
+	}, logger, Dependencies{}, nil)
+
+	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/dev/verify", nil)
+	invalidResponse := httptest.NewRecorder()
+	handler.ServeHTTP(invalidResponse, invalidRequest)
+	if invalidResponse.Code != http.StatusForbidden {
+		t.Fatalf("expected invalid token to return 403, got %d", invalidResponse.Code)
+	}
+
+	validRequest := httptest.NewRequest(http.MethodGet, "/api/dev/verify", nil)
+	validRequest.Header.Set("X-Dev-Token", "dev-secret")
+	validResponse := httptest.NewRecorder()
+	handler.ServeHTTP(validResponse, validRequest)
+	if validResponse.Code != http.StatusOK {
+		t.Fatalf("expected valid token to return 200, got %d", validResponse.Code)
+	}
+}
+
 func TestProxyPreservesHeadersCookiesAndBody(t *testing.T) {
 	transport := roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		if request.Header.Get("X-Dev-Token") != "dev-secret" {

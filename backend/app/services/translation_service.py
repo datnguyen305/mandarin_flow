@@ -30,14 +30,14 @@ class LocalTranslationProvider(TranslationProvider):
 
 class OpenAITranslationProvider(TranslationProvider):
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
-        self.api_key = api_key or settings.openai_api_key
+        self.api_key = api_key or settings.openai_translation_api_key or settings.openai_api_key
         self.model = model or settings.openai_translation_model
 
     async def translate_batch(self, texts: list[str], source_language: str, target_language: str) -> list[str]:
         if not texts:
             return []
         if not self.api_key:
-            raise TranslationProviderError("OPENAI_API_KEY is required when TRANSLATION_PROVIDER=openai")
+            raise TranslationProviderError("OPENAI_TRANSLATION_API_KEY is required when TRANSLATION_PROVIDER=openai")
 
         try:
             return await self._translate_batch_once(texts, source_language, target_language)

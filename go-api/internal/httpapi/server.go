@@ -30,8 +30,10 @@ func newHandler(cfg config.Config, logger *slog.Logger, deps Dependencies, trans
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", jsonHandler(http.StatusOK, map[string]string{"status": "ok", "service": "go-api"}))
 	mux.HandleFunc("GET /ready", readinessHandler(cfg.LegacyBackendURL, deps))
+	native := &nativeAPI{cfg: cfg, deps: deps, logger: logger}
+	mux.HandleFunc("GET /api/dev/verify", native.verifyDevAccess)
 	if deps.Store != nil {
-		(&nativeAPI{cfg: cfg, deps: deps, logger: logger}).register(mux)
+		native.register(mux)
 	}
 	mux.Handle("/api/", proxy)
 
@@ -139,6 +141,9 @@ func recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			defer func() {
 				if recovered := recover(); recovered != nil {
+					if recovered == http.ErrAbortHandler {
+						panic(recovered)
+					}
 					logger.Error("panic recovered", "path", request.URL.Path, "error", recovered)
 					writeJSON(writer, http.StatusInternalServerError, map[string]any{
 						"error": map[string]string{"code": "internal_error", "message": "Internal server error."},

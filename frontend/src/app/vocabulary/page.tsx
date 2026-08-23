@@ -62,7 +62,7 @@ export default function VocabularyPage() {
     setDetailsErrorById((current) => ({ ...current, [item.id]: undefined }));
     setDetailsLoadingById((current) => ({ ...current, [item.id]: true }));
     try {
-      const details = await lookupWord(item.word, item.subtitle_sentence);
+      const details = await lookupWord(item.word, item.subtitle_sentence, item.pinyin);
       setDetailsById((current) => ({ ...current, [item.id]: details }));
     } catch (exc) {
       setDetailsErrorById((current) => ({ ...current, [item.id]: exc instanceof Error ? exc.message : "Không thể tải chi tiết nghĩa." }));

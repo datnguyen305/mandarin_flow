@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, KeyRound, Library, Palette, Home } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { BookOpen, Library, Palette, Home } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const THEME_KEY = "fluentmandarin:pastel-theme";
 const THEME_EVENT = "pastel-theme-updated";
@@ -25,6 +25,8 @@ const themes = [
 export function AppHeader() {
   const pathname = usePathname();
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
+  const visibleNavItems = navItems.filter((item) => !item.watchOnly || pathname === "/watch");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     applyTheme(theme);
@@ -38,7 +40,7 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
-      <nav className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <nav className="relative mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
         <Link href="/" className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-700 font-serif text-lg font-bold text-cream-50 shadow-sm">
             汉
@@ -49,16 +51,19 @@ export function AppHeader() {
           </span>
         </Link>
 
-        <div className="order-3 grid w-full grid-cols-3 gap-1 rounded-xl bg-cream-200/70 p-1 text-sm font-medium text-slate-600 sm:order-none sm:w-auto sm:flex sm:bg-transparent sm:p-0">
-          {navItems.map((item) => {
-            if (item.watchOnly && pathname !== "/watch") return null;
+        <div
+          className={`order-3 grid w-full gap-1 rounded-xl bg-cream-200/70 p-1 text-sm font-medium text-slate-600 sm:order-none sm:w-auto lg:absolute lg:left-1/2 lg:-translate-x-1/2 ${
+            visibleNavItems.length === 3 ? "grid-cols-3" : "grid-cols-2"
+          }`}
+        >
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const href = item.href;
             const active = item.watchOnly ? pathname === "/watch" : item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
-                className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 transition ${
-                  active ? "bg-cream-50 font-semibold text-brand-800 shadow-sm sm:border-b-2 sm:border-brand-700 sm:bg-transparent sm:pb-1 sm:shadow-none" : "hover:bg-cream-100 hover:text-brand-700 sm:hover:bg-transparent"
+                className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 transition ${
+                  active ? "bg-cream-50 font-semibold text-brand-800 shadow-sm" : "hover:bg-cream-100 hover:text-brand-700"
                 }`}
                 href={href}
                 key={item.href}
@@ -70,10 +75,26 @@ export function AppHeader() {
           })}
         </div>
 
-        <div className="inline-flex items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-xl border border-cream-200 bg-cream-100/80 px-2.5 py-2 shadow-sm">
-            <Palette size={16} className="text-brand-800" />
-            <div className="flex items-center gap-1.5">
+        <div className="ml-auto inline-flex items-center justify-end">
+          <div className="inline-flex items-center rounded-xl border border-cream-200 bg-cream-100/80 p-1.5 shadow-sm">
+            <button
+              aria-expanded={paletteOpen}
+              aria-label={paletteOpen ? "Thu gọn bảng màu" : "Mở bảng màu"}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-800 transition hover:bg-cream-200 hover:text-brand-900"
+              onClick={() => setPaletteOpen((open) => !open)}
+              title={paletteOpen ? "Thu gọn bảng màu" : "Mở bảng màu"}
+              type="button"
+            >
+              <Palette size={16} />
+            </button>
+            <div
+              aria-hidden={!paletteOpen}
+              className={`flex items-center gap-3 transition-all duration-300 ease-out ${
+                paletteOpen
+                  ? "ml-1.5 max-w-64 overflow-visible scale-100 opacity-100"
+                  : "max-w-0 overflow-hidden scale-95 opacity-0 pointer-events-none"
+              }`}
+            >
               {themes.map((item) => (
                 <button
                   aria-label={`Chọn màu ${item.label}`}
@@ -87,18 +108,6 @@ export function AppHeader() {
               ))}
             </div>
           </div>
-          <Link
-            aria-label="Mở công cụ Dev"
-            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-sm transition ${
-              pathname.startsWith("/dev")
-                ? "border-brand-300 bg-brand-700 text-cream-50"
-                : "border-cream-200 bg-cream-100/80 text-brand-800 hover:bg-cream-200"
-            }`}
-            href="/dev"
-            title="Dev"
-          >
-            <KeyRound size={18} />
-          </Link>
         </div>
       </nav>
     </header>

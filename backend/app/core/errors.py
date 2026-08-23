@@ -36,6 +36,10 @@ class ASRProviderError(AppError):
     status_code = 502
     code = "asr_provider_failure"
 
+    def __init__(self, message: str, error_class: str = "UNKNOWN") -> None:
+        self.error_class = error_class
+        super().__init__(message)
+
 
 class DatabaseError(AppError):
     status_code = 500

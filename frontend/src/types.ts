@@ -33,6 +33,8 @@ export interface SubtitleBatch {
 export interface ProcessingProgress {
   video_id: string;
   status: "pending" | "processing" | "completed" | "failed";
+  phase?: string;
+  phase_progress?: number;
   processed_batches: number;
   total_batches: number;
   processed_subtitles: number;
@@ -46,8 +48,14 @@ export interface ImportedVideo {
   title: string;
   url: string;
   thumbnail_url?: string | null;
+  duration_seconds?: number | null;
+  channel_name?: string | null;
+  channel_id?: string | null;
+  upload_date?: string | null;
+  metadata_fetched_at?: string | null;
   language: string;
   processing_status: string;
+  tags: string[];
   created_at: string;
 }
 

@@ -1,15 +1,23 @@
+import asyncio
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import dictionary, subtitles, videos, vocabulary
+from app.api import agent, dictionary, subtitles, videos, vocabulary
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.services.agent_request_service import resume_agent_executions
 
 configure_logging()
 
 app = FastAPI(title=settings.app_name)
+
+
+@app.on_event("startup")
+async def resume_agent_request_tasks() -> None:
+    asyncio.create_task(resume_agent_executions())
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,3 +42,4 @@ app.include_router(videos.router, prefix="/api")
 app.include_router(subtitles.router, prefix="/api")
 app.include_router(dictionary.router, prefix="/api")
 app.include_router(vocabulary.router, prefix="/api")
+app.include_router(agent.router, prefix="/api")

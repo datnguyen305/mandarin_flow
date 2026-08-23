@@ -1,8 +1,10 @@
 import pytest
+from starlette.responses import StreamingResponse
 
+from app.api.videos import stream_video_processing
 from app.core.config import settings
 from app.services.segmentation_service import SegmentationProvider
-from app.services.subtitle_queue import format_sse, prioritized_batch_order
+from app.services.subtitle_queue import SubtitleEventBroker, format_sse, prioritized_batch_order
 from app.services.subtitle_service import SubtitleService
 from app.services.transcript_types import RawSubtitle
 from app.services.translation_service import TranslationProvider
@@ -140,6 +142,31 @@ async def test_translation_operates_on_subtitle_batch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_subtitle_batch_reports_monotonic_intra_batch_progress() -> None:
+    service = build_service()
+    subtitles = [
+        FakeSubtitle(0, 0, 2, "我今天去医院工作"),
+        FakeSubtitle(1, 3, 5, "医院离我家很近"),
+    ]
+    reported: list[float] = []
+
+    async def capture(progress: float) -> None:
+        reported.append(progress)
+
+    await service._process_subtitle_batch(  # type: ignore[arg-type]
+        subtitles,
+        "zh",
+        "vi",
+        progress_callback=capture,
+    )
+
+    assert reported == sorted(reported)
+    assert reported[0] > 0
+    assert reported[-1] >= 0.95
+    assert len(reported) >= 4
+
+
+@pytest.mark.asyncio
 async def test_batch_processing_uses_token_meanings_when_translation_is_placeholder() -> None:
     service = build_service_with_dictionary()
     subtitles = [FakeSubtitle(0, 0, 2, "我今天去医院工作")]
@@ -156,3 +183,26 @@ def test_sse_event_generation() -> None:
     assert event.startswith("id: event-1\nevent: subtitle_batch\n")
     assert '"batch_index": 0' in event
     assert event.endswith("\n\n")
+
+
+@pytest.mark.asyncio
+async def test_processing_stream_endpoint_returns_streaming_response() -> None:
+    response = await stream_video_processing("abc123abc12")
+
+    assert isinstance(response, StreamingResponse)
+    assert response.media_type == "text/event-stream"
+
+
+@pytest.mark.asyncio
+async def test_sse_broker_sends_heartbeat_when_batch_is_slow(monkeypatch) -> None:
+    async def timeout_immediately(awaitable, timeout):
+        awaitable.close()
+        raise TimeoutError
+
+    monkeypatch.setattr("app.services.subtitle_queue.asyncio.wait_for", timeout_immediately)
+    subscription = SubtitleEventBroker().subscribe("video-1")
+
+    message = await subscription.__anext__()
+    await subscription.aclose()
+
+    assert message == {"event": "heartbeat", "data": {"video_id": "video-1"}}

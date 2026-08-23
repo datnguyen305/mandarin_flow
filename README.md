@@ -255,8 +255,8 @@ Example process request:
 The backend defines provider interfaces for segmentation, translation, and dictionary lookup:
 
 ```python
-class SegmentationProvider:
-    def segment(self, text: str) -> list[str]: ...
+class SubtitleNLPProvider:
+    async def analyze_batch(self, texts: list[str]): ...
 
 class TranslationProvider:
     async def translate_batch(self, texts: list[str], source_language: str, target_language: str) -> list[str]: ...
@@ -281,6 +281,38 @@ DICTIONARY_PROVIDER=cvdict
 CVDICT_PATH=app/data/CVDICT.u8
 ```
 
+## OpenAI subtitle segmentation and contextual pinyin
+
+Subtitle processing sends each subtitle batch to OpenAI Structured Outputs. The response contains natural
+lexical tokens and tone-mark pinyin resolved from the full sentence, so polyphonic characters use their
+contextual pronunciation. The validated result is cached in Redis and stored with subtitle tokens in PostgreSQL.
+Dictionary requests then send both Hanzi and stored pinyin to the Go API; opening the dictionary does not make
+another pronunciation request.
+
+```env
+SUBTITLE_NLP_PROVIDER=openai
+OPENAI_NLP_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-your-key
+```
+
+The backend retries invalid or temporary OpenAI responses once. If both attempts fail, lightweight Jieba and
+`pypinyin` processing keeps the subtitle batch usable. Existing videos retain their old tokenization and pinyin
+until their subtitle batches are reprocessed.
+
+## Automatic video topics
+
+When a dev imports a video without entering topics, the subtitle worker sends the title and up to 20 representative
+subtitle lines to `OpenAIVideoTopicClassifier`. Structured Output selects one primary topic and at most two secondary
+topics from the application's fixed Vietnamese topic list, then persists them in `videos.tags`. Manually supplied or
+previously stored topics always take precedence. Classification failure leaves `tags` empty and does not stop subtitle
+processing.
+
+```env
+VIDEO_TOPIC_CLASSIFIER_PROVIDER=openai
+OPENAI_TOPIC_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-your-key
+```
+
 ## OpenAI Translation
 
 To translate each full subtitle sentence with OpenAI instead of the local mock translator:
@@ -297,7 +329,7 @@ Then restart:
 docker compose up --build
 ```
 
-The backend sends subtitle batches to OpenAI and expects a Vietnamese JSON array in the same order. Token pinyin and dictionary meanings are still generated separately for clickable word learning.
+The backend sends subtitle batches to OpenAI and expects a Vietnamese JSON array in the same order. Dictionary meanings remain separate; segmentation and contextual pinyin come from the OpenAI subtitle NLP provider.
 
 ## OpenAI ASR
 

@@ -36,6 +36,7 @@ type nativeAPI struct {
 }
 
 func (api *nativeAPI) register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/dictionary/{word}", api.lookupDictionary)
 	mux.HandleFunc("GET /api/videos", api.listVideos)
 	mux.HandleFunc("GET /api/videos/progress", api.listProgress)
 	mux.HandleFunc("POST /api/videos/cookies", api.uploadCookies)
@@ -105,6 +106,13 @@ func (api *nativeAPI) deleteVideo(writer http.ResponseWriter, request *http.Requ
 		}
 	}
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (api *nativeAPI) verifyDevAccess(writer http.ResponseWriter, request *http.Request) {
+	if !api.requireDevAccess(writer, request) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (api *nativeAPI) getSubtitles(raw bool) http.HandlerFunc {

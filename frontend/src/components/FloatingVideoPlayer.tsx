@@ -152,6 +152,8 @@ export function FloatingVideoPlayer() {
   }, [loadVideo, watchVideo]);
 
   useEffect(() => {
+    let animationFrame = 0;
+
     function updateAnchorRect() {
       if (!dockedInWatch) {
         setAnchorStyle(null);
@@ -169,13 +171,22 @@ export function FloatingVideoPlayer() {
     }
 
     updateAnchorRect();
-    window.addEventListener("resize", updateAnchorRect);
-    window.addEventListener("scroll", updateAnchorRect, true);
-    const timer = window.setInterval(updateAnchorRect, 500);
+    const scheduleAnchorUpdate = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(updateAnchorRect);
+    };
+    window.addEventListener("resize", scheduleAnchorUpdate);
+    window.addEventListener("scroll", scheduleAnchorUpdate, true);
+    window.visualViewport?.addEventListener("resize", scheduleAnchorUpdate);
+    const anchor = document.getElementById(GLOBAL_PLAYER_ANCHOR_ID);
+    const observer = anchor ? new ResizeObserver(scheduleAnchorUpdate) : null;
+    if (anchor && observer) observer.observe(anchor);
     return () => {
-      window.removeEventListener("resize", updateAnchorRect);
-      window.removeEventListener("scroll", updateAnchorRect, true);
-      window.clearInterval(timer);
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", scheduleAnchorUpdate);
+      window.removeEventListener("scroll", scheduleAnchorUpdate, true);
+      window.visualViewport?.removeEventListener("resize", scheduleAnchorUpdate);
+      observer?.disconnect();
     };
   }, [dockedInWatch]);
 
@@ -190,7 +201,9 @@ export function FloatingVideoPlayer() {
   return (
     <aside
       aria-hidden={!visible}
-      className={`fixed z-40 overflow-hidden border border-cream-200 bg-black shadow-2xl transition-[left,top,width,height,bottom,right] duration-300 ${
+      className={`fixed z-40 overflow-hidden border border-cream-200 bg-black shadow-2xl ${
+        dockedInWatch ? "transition-none" : "transition-[left,top,width,height,bottom,right] duration-300"
+      } ${
         visible ? "" : "invisible pointer-events-none"
       } ${
         dockedInWatch ? "rounded-md" : "rounded-lg"

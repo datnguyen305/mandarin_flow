@@ -12,7 +12,7 @@ from app.db.redis import RedisCache
 from app.db.session import AsyncSessionLocal
 from app.repositories.batch_repository import BatchRepository
 from app.repositories.video_repository import VideoRepository
-from app.schemas.subtitle import SubtitleBatchResponse, SubtitleProcessingProgress
+from app.schemas.subtitle import SubtitleProcessingProgress
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,10 @@ class SubtitleEventBroker:
         self.subscribers[video_id].add(queue)
         try:
             while True:
-                yield await queue.get()
+                try:
+                    yield await asyncio.wait_for(queue.get(), timeout=15)
+                except TimeoutError:
+                    yield {"event": "heartbeat", "data": {"video_id": video_id}}
         finally:
             self.subscribers[video_id].discard(queue)
 
@@ -87,6 +90,7 @@ class InMemorySubtitleProcessingQueue(SubtitleProcessingQueue):
             video = await VideoRepository(db).get_by_youtube_id(video_id)
             if video is None:
                 return
+            await VideoRepository(db).set_processing_status(video, "processing")
             await BatchRepository(db).mark_status(video.id, batch_index, "pending")
             await db.commit()
         async with self.lock:
@@ -97,28 +101,111 @@ class InMemorySubtitleProcessingQueue(SubtitleProcessingQueue):
 
     async def _worker(self, video_id: str) -> None:
         await self.broker.publish(video_id, "processing_started", {"video_id": video_id})
-        while True:
-            next_batch = await self._next_batch(video_id)
-            if next_batch is None:
-                progress = await self._progress(video_id)
-                if progress and progress.status == "completed":
-                    await self.broker.publish(video_id, "processing_completed", {"video_id": video_id})
-                return
-
+        classification_task: asyncio.Task | None = None
+        try:
             async with AsyncSessionLocal() as db:
                 service = build_subtitle_service(db, RedisCache(None))
                 try:
-                    batch = await service.process_batch(video_id, next_batch)
-                    await self.broker.publish(video_id, "subtitle_batch", batch.model_dump())
-                    progress = await service.progress_for_youtube_id(video_id)
+                    progress = await service.prepare_video_content(video_id)
                     await self.broker.publish(video_id, "processing_progress", progress.model_dump())
                 except Exception as exc:
                     await self.broker.publish(
                         video_id,
                         "processing_failed",
-                        {"video_id": video_id, "batch_index": next_batch, "message": str(exc)},
+                        {
+                            "video_id": video_id,
+                            "message": str(exc),
+                            "error_class": getattr(exc, "error_class", "UNKNOWN"),
+                        },
                     )
-                    logger.exception("subtitle worker batch failed", extra={"video_id": video_id, "batch_index": next_batch})
+                    logger.exception(
+                        "subtitle worker preparation failed",
+                        extra={
+                            "video_id": video_id,
+                            "error_class": getattr(exc, "error_class", "UNKNOWN"),
+                        },
+                    )
+                    return
+
+            classification_task = asyncio.create_task(self._classify_topics(video_id))
+            while True:
+                next_batch = await self._next_batch(video_id)
+                if next_batch is None:
+                    progress = await self._progress(video_id)
+                    if progress and progress.status == "completed":
+                        await self.broker.publish(video_id, "processing_completed", {"video_id": video_id})
+                    return
+
+                async with AsyncSessionLocal() as db:
+                    service = build_subtitle_service(db, RedisCache(None))
+                    try:
+                        initial_progress = await service.progress_for_youtube_id(video_id)
+                        last_persisted_progress = initial_progress.progress
+                        last_persisted_phase = initial_progress.phase
+
+                        async def publish_batch_progress(batch_progress: float) -> None:
+                            nonlocal last_persisted_phase, last_persisted_progress
+                            if initial_progress.total_batches <= 0:
+                                return
+                            batch_fraction = (
+                                initial_progress.processed_batches + batch_progress
+                            ) / initial_progress.total_batches
+                            overall_progress = min(
+                                0.30 + 0.68 * batch_fraction,
+                                0.98,
+                            )
+                            phase = (
+                                "translating"
+                                if batch_progress < 0.40
+                                else "segmenting"
+                                if batch_progress < 0.80
+                                else "saving"
+                            )
+                            if phase != last_persisted_phase or overall_progress - last_persisted_progress >= 0.03:
+                                async with AsyncSessionLocal() as progress_db:
+                                    await VideoRepository(progress_db).set_processing_phase_by_youtube_id(
+                                        video_id,
+                                        phase,
+                                        overall_progress,
+                                    )
+                                    await progress_db.commit()
+                                last_persisted_phase = phase
+                                last_persisted_progress = overall_progress
+                            interim_progress = initial_progress.model_copy(
+                                update={
+                                    "status": "processing",
+                                    "phase": phase,
+                                    "phase_progress": batch_progress,
+                                    "progress": overall_progress,
+                                }
+                            )
+                            await self.broker.publish(video_id, "processing_progress", interim_progress.model_dump())
+
+                        batch = await service.process_batch(
+                            video_id,
+                            next_batch,
+                            progress_callback=publish_batch_progress,
+                        )
+                        await self.broker.publish(video_id, "subtitle_batch", batch.model_dump())
+                        progress = await service.progress_for_youtube_id(video_id)
+                        await self.broker.publish(video_id, "processing_progress", progress.model_dump())
+                    except Exception as exc:
+                        await self.broker.publish(
+                            video_id,
+                            "processing_failed",
+                            {"video_id": video_id, "batch_index": next_batch, "message": str(exc)},
+                        )
+                        logger.exception("subtitle worker batch failed", extra={"video_id": video_id, "batch_index": next_batch})
+        finally:
+            if classification_task is not None:
+                await classification_task
+
+    async def _classify_topics(self, video_id: str) -> None:
+        try:
+            async with AsyncSessionLocal() as db:
+                await build_subtitle_service(db, RedisCache(None)).classify_video_topics(video_id)
+        except Exception:
+            logger.exception("video topic classification worker failed", extra={"video_id": video_id})
 
     async def _next_batch(self, video_id: str) -> int | None:
         async with AsyncSessionLocal() as db:

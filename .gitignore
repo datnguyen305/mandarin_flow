@@ -12,3 +12,4 @@ coverage/
 .DS_Store
 *.dump.sql
 mandarinflow*.sql
+data/openai_dictionary_normalization/

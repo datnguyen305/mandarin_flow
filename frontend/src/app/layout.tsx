@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { AppHeader } from "@/components/AppHeader";
 import { FloatingVideoPlayer } from "@/components/FloatingVideoPlayer";
-import { ImportProcessingMonitor } from "@/components/ImportProcessingMonitor";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,7 +31,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Hãy dùng máy tính để đem lại trải nghiệm tốt hơn
         </div>
         {children}
-        <ImportProcessingMonitor />
         <FloatingVideoPlayer />
       </body>
     </html>
