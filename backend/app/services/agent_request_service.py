@@ -39,10 +39,10 @@ class AgentRequestService:
         existing = await self._active_request("video_import", video_id)
         if existing:
             # An active approval request is not the same as an imported video.
-            # Return its real state so callers can approve or inspect it instead
-            # of repeatedly creating duplicate requests.
+            # Re-send approval for pending requests because the original Telegram
+            # notification may have been lost even when the API call succeeded.
             notification_sent = True
-            if existing.status == "pending" and existing.error:
+            if existing.status == "pending":
                 notification_sent = await self._notify(existing)
             return existing.id, "pending_approval" if notification_sent else "notification_failed", 0
         if guest_id is not None:

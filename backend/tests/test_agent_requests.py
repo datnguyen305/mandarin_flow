@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.core import config
 from app.schemas.agent import VocabularyAgentRequest, VideoAgentRequest
 from app.services.agent_request_service import AgentRequestService
+from app.services import agent_request_service
 from app.services.telegram_service import TelegramService
 
 
@@ -49,3 +51,32 @@ async def test_telegram_approval_buttons_only_contain_request_id(monkeypatch: py
 
     assert sent is True
     assert captured["payload"]["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "approve:req_123"
+
+
+@pytest.mark.asyncio
+async def test_pending_video_request_resends_telegram_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+    existing = SimpleNamespace(id="req_existing", status="pending", error=None)
+
+    class FakeVideoRepository:
+        def __init__(self, _db) -> None:
+            pass
+
+        async def get_by_youtube_id(self, _video_id: str):
+            return None
+
+    monkeypatch.setattr(agent_request_service, "VideoRepository", FakeVideoRepository)
+    service = AgentRequestService(SimpleNamespace(), TelegramService("bot-token"))
+    monkeypatch.setattr(service, "_active_request", AsyncMock(return_value=existing))
+    notify = AsyncMock(return_value=True)
+    monkeypatch.setattr(service, "_notify", notify)
+
+    request_id, request_status, _ = await service.request_video(
+        VideoAgentRequest(
+            youtube_url="https://www.youtube.com/watch?v=abc123abc12",
+            reason="Retry pending approval notification.",
+        )
+    )
+
+    assert request_id == "req_existing"
+    assert request_status == "pending_approval"
+    notify.assert_awaited_once_with(existing)
