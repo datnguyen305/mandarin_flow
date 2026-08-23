@@ -121,6 +121,8 @@ FRONTEND_URL=http://YOUR_VPS_IP
 NEXT_PUBLIC_API_BASE_URL=http://YOUR_VPS_IP
 NEXT_PUBLIC_FEEDBACK_EMAIL=you@example.com
 POSTGRES_PASSWORD=use-a-strong-password
+# URL-encode the same password for backend and Go API connection URLs.
+POSTGRES_PASSWORD_URLENCODED=use-a-strong-password
 DEV_ACCESS_TOKEN=use-a-strong-dev-token
 ```
 
@@ -197,7 +199,13 @@ Configure this repository variable because it is public and compiled into the fr
 NEXT_PUBLIC_FEEDBACK_EMAIL=your-public-email@example.com
 ```
 
-The VPS must already contain `/root/mandarin_flow/.env`. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image.
+The VPS must already contain `/root/mandarin_flow/.env`. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_PASSWORD_URLENCODED`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image. `POSTGRES_PASSWORD` is passed raw to PostgreSQL; `POSTGRES_PASSWORD_URLENCODED` is used in application connection URLs. Generate the encoded value without printing the password:
+
+```bash
+python3 -c 'from urllib.parse import quote; print(quote(input(), safe=""))'
+```
+
+For a freshly reinstalled VPS, run `sudo bash scripts/bootstrap_vps.sh` from a checked-out copy of this repository. The script installs Docker if needed, clones `main`, and refuses to overwrite an existing application directory.
 
 To roll back, use a previously successful commit SHA:
 

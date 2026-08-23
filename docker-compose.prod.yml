@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     environment:
       ENVIRONMENT: production
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD_URLENCODED:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
       REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
       TRANSLATION_PROVIDER: ${TRANSLATION_PROVIDER:-local}
@@ -93,7 +93,7 @@ services:
       LISTEN_ADDRESS: :8080
       LEGACY_BACKEND_URL: http://backend:8000
       FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD_URLENCODED:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}}@postgres:5432/${POSTGRES_DB:-youtube_language_learning}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: production
       GUEST_COOKIE_NAME: ${GUEST_COOKIE_NAME:-mandarinflow_guest}
