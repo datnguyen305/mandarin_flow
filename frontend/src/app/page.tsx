@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags } from "lucide-react";
 import { Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
 import { ALL_VIDEO_TAGS, filterVideos, formatVideoDuration, getVideoTags, paginateVideos, parseVideoPage, videoCatalogUrl } from "@/lib/videoCatalog";
@@ -25,6 +25,7 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const videoListRef = useRef<HTMLDivElement>(null);
+  const tagMenuRef = useRef<HTMLDetailsElement>(null);
   const [videos, setVideos] = useState<ImportedVideo[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,17 @@ function HomePageContent() {
     if (!options.some((tag) => tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi"))) options.push(selectedTag);
     return options;
   }, [availableTags, selectedTag]);
+  const desktopTagOptions = useMemo(() => {
+    const visible = tagOptions.slice(0, 5);
+    const selectedOption = tagOptions.find((tag) => tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi"));
+
+    if (selectedOption && !visible.includes(selectedOption)) visible[visible.length - 1] = selectedOption;
+
+    return {
+      visible,
+      overflow: tagOptions.filter((tag) => !visible.includes(tag)),
+    };
+  }, [selectedTag, tagOptions]);
   const filteredVideos = useMemo(() => filterVideos(videos, selectedTag, query), [query, selectedTag, videos]);
   const pagination = useMemo(() => paginateVideos(filteredVideos, requestedPage), [filteredVideos, requestedPage]);
 
@@ -81,6 +93,7 @@ function HomePageContent() {
   }, [loading, pagination.page, requestedPage, router, selectedTag]);
 
   function selectTag(tag: string) {
+    tagMenuRef.current?.removeAttribute("open");
     router.replace(videoCatalogUrl(tag, 1), { scroll: false });
   }
 
@@ -150,29 +163,53 @@ function HomePageContent() {
         </div>
 
         <div className="mb-5 flex scroll-mt-20 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" ref={videoListRef}>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2" aria-label="Lọc video theo chủ đề">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <div className="min-w-0 flex-1" aria-label="Lọc video theo chủ đề">
+            <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 lg:hidden">
               <Tags size={17} className="text-brand-700" />
               <span>Lọc theo chủ đề</span>
             </div>
-            {tagOptions.map((tag) => {
-              const active = tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi");
-              return (
-                <button
-                  aria-pressed={active}
-                  className={`min-h-10 rounded-full border px-4 text-sm font-semibold transition ${
-                    active
-                      ? "border-brand-700 bg-brand-700 text-cream-50 shadow-sm"
-                      : "border-cream-300 bg-cream-50 text-slate-600 hover:border-brand-300 hover:text-brand-800"
-                  }`}
-                  key={tag}
-                  onClick={() => selectTag(tag)}
-                  type="button"
-                >
-                  {tag}
-                </button>
-              );
-            })}
+            <div className="scrollbar-none flex w-full gap-2 overflow-x-auto pb-1 lg:hidden">
+              {tagOptions.map((tag) => (
+                <TagFilterButton key={tag} tag={tag} selectedTag={selectedTag} onSelect={selectTag} />
+              ))}
+            </div>
+            <div className="hidden h-12 min-w-0 items-center gap-2 lg:flex">
+              <div className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-slate-700">
+                <Tags size={16} className="text-brand-700" />
+                <span>Lọc theo chủ đề</span>
+              </div>
+              {desktopTagOptions.visible.map((tag) => (
+                <TagFilterButton key={tag} tag={tag} selectedTag={selectedTag} onSelect={selectTag} />
+              ))}
+              {desktopTagOptions.overflow.length > 0 ? (
+                <details className="group relative shrink-0" ref={tagMenuRef}>
+                  <summary
+                    aria-label="Xem thêm chủ đề"
+                    className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full border border-cream-300 bg-cream-50 text-slate-600 transition hover:border-brand-300 hover:text-brand-800 [&::-webkit-details-marker]:hidden"
+                  >
+                    <ChevronDown className="transition-transform group-open:rotate-180" size={16} />
+                  </summary>
+                  <div className="absolute left-0 top-11 z-20 min-w-40 rounded-lg border border-cream-200 bg-cream-50 p-1.5 shadow-lg">
+                    {desktopTagOptions.overflow.map((tag) => {
+                      const active = tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi");
+                      return (
+                        <button
+                          aria-pressed={active}
+                          className={`flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition ${
+                            active ? "bg-brand-700 font-semibold text-cream-50" : "text-slate-600 hover:bg-cream-100 hover:text-brand-800"
+                          }`}
+                          key={tag}
+                          onClick={() => selectTag(tag)}
+                          type="button"
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+              ) : null}
+            </div>
           </div>
           <label className="relative block w-full shrink-0 lg:w-[calc((100%-2rem)/3)]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
@@ -368,6 +405,33 @@ function HomePageContent() {
 
 function HomePageLoading() {
   return <main className="min-h-[calc(100vh-57px)] bg-rice" />;
+}
+
+function TagFilterButton({
+  tag,
+  selectedTag,
+  onSelect,
+}: {
+  tag: string;
+  selectedTag: string;
+  onSelect: (tag: string) => void;
+}) {
+  const active = tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi");
+
+  return (
+    <button
+      aria-pressed={active}
+      className={`h-9 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition ${
+        active
+          ? "border-brand-700 bg-brand-700 text-cream-50 shadow-sm"
+          : "border-cream-300 bg-cream-50 text-slate-600 hover:border-brand-300 hover:text-brand-800"
+      }`}
+      onClick={() => onSelect(tag)}
+      type="button"
+    >
+      {tag}
+    </button>
+  );
 }
 
 function countSavedWordsByVideo(items: SavedVocabulary[]): Record<string, number> {

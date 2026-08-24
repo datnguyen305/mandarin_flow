@@ -108,3 +108,11 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--color-brand-500));
 }
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
