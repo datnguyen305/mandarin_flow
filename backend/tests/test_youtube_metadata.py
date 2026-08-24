@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 import sys
 import types
@@ -34,6 +35,11 @@ async def test_get_metadata_uses_ytdlp_without_downloading(monkeypatch) -> None:
             }
 
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=FakeYoutubeDL))
+
+    async def run_inline(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(asyncio, "to_thread", run_inline)
 
     metadata = await YouTubeService().get_metadata("https://www.youtube.com/watch?v=TOC78RUj8pg")
 

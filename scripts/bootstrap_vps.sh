@@ -30,7 +30,8 @@ install -d -m 700 "${APP_DIR}/cookies"
 cat <<EOF
 Bootstrap complete: ${APP_DIR}
 Next steps:
-  1. Configure GitHub Environment secrets, including PRODUCTION_ENV_FILE.
-  2. Ensure the VPS SSH key is configured as VPS_SSH_KEY.
-  3. Run the Build and deploy workflow.
+  1. Upload and configure ${APP_DIR}/.env manually, then chmod 600 it.
+  2. Configure the GitHub production environment SSH and GHCR secrets.
+  3. Configure NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_FEEDBACK_EMAIL as GitHub environment variables.
+  4. Run the Build and deploy workflow.
 EOF

@@ -105,82 +105,43 @@ NEXT_PUBLIC_FEEDBACK_EMAIL=you@example.com
 
 ## VPS Deployment
 
-Production uses `docker-compose.prod.yml` with Caddy as the only public entrypoint. Frontend, backend, PostgreSQL, and Redis stay inside the Docker network.
+Production uses `docker-compose.prod.yml` with Caddy as the only public entrypoint. PostgreSQL, Redis and application ports remain private to the Docker network. Only ports `80` and `443` should be public.
 
-For first deployment without a domain, copy the production env template:
+On a fresh VPS, run the bootstrap script from a temporary checkout. It installs Docker, clones `main` into `/root/mandarin_flow`, and refuses to overwrite an existing application directory:
 
 ```bash
+sudo bash scripts/bootstrap_vps.sh
+```
+
+Create `/root/mandarin_flow/.env` from `.env.production.example`, configure the production values, and protect the file:
+
+```bash
+cd /root/mandarin_flow
 cp .env.production.example .env
+chmod 600 .env
 ```
 
-Edit these values:
+The required production values include the public URLs, raw and URL-encoded PostgreSQL password, dev token, separate OpenAI keys, and all Telegram bot/webhook settings. `.env` is managed manually on the VPS; GitHub Actions validates it but never uploads or overwrites it.
 
-```env
-PUBLIC_SITE_ADDRESS=:80
-FRONTEND_URL=http://YOUR_VPS_IP
-NEXT_PUBLIC_API_BASE_URL=http://YOUR_VPS_IP
-NEXT_PUBLIC_FEEDBACK_EMAIL=you@example.com
-POSTGRES_PASSWORD=use-a-strong-password
-# URL-encode the same password for backend and Go API connection URLs.
-POSTGRES_PASSWORD_URLENCODED=use-a-strong-password
-DEV_ACCESS_TOKEN=use-a-strong-dev-token
-```
-
-Log in to GHCR once on the VPS, then start production from the published images:
+Do not run production Compose without an immutable image tag. `IMAGE_TAG` is mandatory and must be a full commit SHA:
 
 ```bash
-echo "YOUR_GHCR_READ_TOKEN" | docker login ghcr.io -u datnguyen305 --password-stdin
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --no-build
-```
-
-Check status:
-
-```bash
-docker compose -f docker-compose.prod.yml ps
-curl http://YOUR_VPS_IP
-curl http://YOUR_VPS_IP/health
-curl http://YOUR_VPS_IP/api/videos
-```
-
-Only ports `80` and `443` should be exposed publicly. Do not expose PostgreSQL, Redis, frontend port `3000`, or backend port `8000` on the VPS firewall.
-
-To move local data to the VPS, dump PostgreSQL locally:
-
-```bash
-docker compose exec -T postgres pg_dump -U postgres -d youtube_language_learning > mandarinflow.dump.sql
-```
-
-Copy `mandarinflow.dump.sql` to the VPS, then restore into the production PostgreSQL container:
-
-```bash
-docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres -d youtube_language_learning < mandarinflow.dump.sql
-```
-
-When you later add a domain, point the domain's A record to the VPS IP and update `.env`:
-
-```env
-PUBLIC_SITE_ADDRESS=your-domain.com
-FRONTEND_URL=https://your-domain.com
-NEXT_PUBLIC_API_BASE_URL=https://your-domain.com
-```
-
-The frontend public API URL is compiled by GitHub Actions. Deploy the latest published images with:
-
-```bash
-docker compose -f docker-compose.prod.yml pull backend frontend
-docker compose -f docker-compose.prod.yml up -d --no-build
+IMAGE_TAG=FULL_40_CHARACTER_COMMIT_SHA docker compose -f docker-compose.prod.yml config --quiet
 ```
 
 ## GitHub Actions Deployment
 
-`.github/workflows/deploy.yml` runs on every push to `main`:
+`.github/workflows/deploy.yml` is the canonical production path and runs on every push to `main`:
 
-1. Build backend and frontend images.
-2. Push both the commit SHA and `latest` tags to GHCR.
-3. SSH to the VPS.
-4. Pull the exact commit SHA images.
-5. Run `docker compose up -d --no-build` and verify `/health`.
+1. Run Go, backend and frontend tests.
+2. Build and publish backend, Go API and frontend images tagged only with the commit SHA.
+3. SSH to the VPS, update the checkout and authenticate to GHCR.
+4. Validate `.env`, pull all exact-SHA images and backup PostgreSQL.
+5. Run Alembic as a one-shot task, then recreate only application services.
+6. Verify container images, health, public readiness and Telegram outbound/webhook connectivity.
+7. Record the successful SHA under `/var/lib/mandarinflow`.
+
+If readiness fails after switching containers, the deploy script automatically restores the previous application SHA. Database schema is not automatically downgraded, so production migrations must remain backward-compatible.
 
 Configure these repository or `production` environment secrets in GitHub:
 
@@ -196,31 +157,37 @@ GHCR_TOKEN        classic PAT with read:packages
 Configure this repository variable because it is public and compiled into the frontend image:
 
 ```text
+NEXT_PUBLIC_API_BASE_URL=https://mandarinflow.online
 NEXT_PUBLIC_FEEDBACK_EMAIL=your-public-email@example.com
 ```
 
-The VPS must already contain `/root/mandarin_flow/.env`; GitHub Actions validates but does not upload or overwrite this file. Runtime secrets such as `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_PASSWORD_URLENCODED`, and `DEV_ACCESS_TOKEN` remain only in that file and are never added to an image. `POSTGRES_PASSWORD` is passed raw to PostgreSQL; `POSTGRES_PASSWORD_URLENCODED` is used in application connection URLs. Generate the encoded value without printing the password:
+Runtime secrets remain only in the VPS `.env` and are never added to an image. `POSTGRES_PASSWORD` is passed raw to PostgreSQL; `POSTGRES_PASSWORD_URLENCODED` is used in application connection URLs. Generate the encoded value without printing the password:
 
 ```bash
 python3 -c 'from urllib.parse import quote; print(quote(input(), safe=""))'
 ```
 
-For a freshly reinstalled VPS, run `sudo bash scripts/bootstrap_vps.sh` from a checked-out copy of this repository. The script installs Docker if needed, clones `main`, and refuses to overwrite an existing application directory.
-
-After the production stack is healthy, copy the local dump to the VPS and restore it with the explicit destructive confirmation:
+Each successful deploy stores pre-migration backups in `/var/lib/mandarinflow/backups` and retains the seven newest files. To move local data to production as a separate destructive operation, create and copy the dump, then use the guarded restore script:
 
 ```bash
+docker compose exec -T postgres pg_dump -U postgres -d youtube_language_learning --no-owner --no-privileges > /tmp/mandarinflow-local.sql
 scp /tmp/mandarinflow-local.sql root@YOUR_VPS_IP:/root/mandarinflow-local.sql
 ssh root@YOUR_VPS_IP 'cd /root/mandarin_flow && RESTORE_LOCAL_DB_CONFIRM=YES bash scripts/restore_local_db.sh /root/mandarinflow-local.sql'
 ```
 
-The restore script stops application services, clears the production `public` schema, imports the dump, and starts the application services again. It does not touch Docker volumes outside this Compose project.
+The restore script first backs up production, stops application services, clears the `public` schema, imports the dump, and restarts the exact SHA recorded in `/var/lib/mandarinflow/current_sha`. It never falls back to `latest`.
 
-To roll back, use a previously successful commit SHA:
+For an explicit rollback, omit the SHA to use the recorded previous release, or provide a full known-good SHA:
 
 ```bash
-IMAGE_TAG=PREVIOUS_COMMIT_SHA docker compose -f docker-compose.prod.yml pull backend frontend
-IMAGE_TAG=PREVIOUS_COMMIT_SHA docker compose -f docker-compose.prod.yml up -d --no-build
+sudo scripts/rollback_production.sh
+sudo scripts/rollback_production.sh FULL_40_CHARACTER_COMMIT_SHA
+```
+
+For a manual emergency deploy, use the same guarded script as GitHub Actions:
+
+```bash
+sudo scripts/deploy_production.sh FULL_40_CHARACTER_COMMIT_SHA
 ```
 
 ## API Overview
