@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Suspense } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { FloatingVideoPlayer } from "@/components/FloatingVideoPlayer";
+import { RouteScrollManager } from "@/components/RouteScrollManager";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
         <AppHeader />
+        <Suspense fallback={null}>
+          <RouteScrollManager />
+        </Suspense>
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 sm:hidden">
           Hãy dùng máy tính để đem lại trải nghiệm tốt hơn
         </div>

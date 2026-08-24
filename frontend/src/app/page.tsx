@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags, UserRound } from "lucide-react";
+import { MotionConfig, motion, stagger, useReducedMotion } from "motion/react";
 import { Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
 import { ALL_VIDEO_TAGS, filterVideos, formatVideoDuration, getVideoTags, paginateVideos, parseVideoPage, videoCatalogUrl } from "@/lib/videoCatalog";
@@ -15,17 +16,19 @@ const FEEDBACK_EMAIL = process.env.NEXT_PUBLIC_FEEDBACK_EMAIL ?? "";
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<HomePageLoading />}>
-      <HomePageContent />
-    </Suspense>
+    <MotionConfig reducedMotion="user">
+      <Suspense fallback={<HomePageLoading />}>
+        <HomePageContent />
+      </Suspense>
+    </MotionConfig>
   );
 }
 
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const videoListRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDetailsElement>(null);
+  const shouldReduceMotion = useReducedMotion();
   const [videos, setVideos] = useState<ImportedVideo[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +103,6 @@ function HomePageContent() {
   function selectPage(page: number) {
     if (page < 1 || page > pagination.totalPages || page === pagination.page) return;
     router.replace(videoCatalogUrl(selectedTag, page), { scroll: false });
-    window.requestAnimationFrame(() => videoListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function handleFeedbackSubmit(event: FormEvent<HTMLFormElement>) {
@@ -138,7 +140,7 @@ function HomePageContent() {
           </div>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
-              <h1 className="text-4xl font-bold leading-tight tracking-normal text-slate-800 sm:text-5xl">MandarinFlow</h1>
+              <AnimatedBrandTitle />
               <p className="mt-4 text-base leading-7 text-slate-500">
                 Chọn video và học tiếng Trung thông qua tương tác trực tiếp.
               </p>
@@ -162,7 +164,7 @@ function HomePageContent() {
           </div>
         </div>
 
-        <div className="mb-5 flex scroll-mt-20 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" ref={videoListRef}>
+        <div className="mb-5 flex scroll-mt-20 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" data-route-scroll-anchor>
           <div className="min-w-0 flex-1" aria-label="Lọc video theo chủ đề">
             <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 lg:hidden">
               <Tags size={17} className="text-brand-700" />
@@ -247,12 +249,26 @@ function HomePageContent() {
         ) : null}
 
         {!loading && !error && filteredVideos.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <motion.div
+            animate="visible"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            initial={shouldReduceMotion ? false : "hidden"}
+            variants={{
+              visible: { transition: { delayChildren: stagger(0.09) } },
+            }}
+          >
             {pagination.items.map((video) => {
               const progress = videoProgress[video.youtube_video_id];
               const watchHref = `/watch?v=${video.youtube_video_id}${progress?.current_time ? `&t=${Math.floor(progress.current_time)}` : ""}`;
               return (
-              <article className="overflow-hidden rounded-3xl border border-cream-200 bg-cream-50 shadow-sm transition hover:border-brand-200 hover:shadow-md" key={video.id}>
+              <motion.article
+                className="overflow-hidden rounded-3xl border border-cream-200 bg-cream-50 shadow-sm transition hover:border-brand-200 hover:shadow-md"
+                key={video.id}
+                variants={{
+                  hidden: { opacity: 0, y: 18 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.52, ease: [0.22, 1, 0.36, 1] } },
+                }}
+              >
                 <Link href={watchHref} className="block">
                   <div className="relative aspect-video bg-[#172d59]">
                     {video.thumbnail_url ? (
@@ -305,10 +321,10 @@ function HomePageContent() {
                     </span>
                   </div>
                 </div>
-              </article>
+              </motion.article>
               );
             })}
-          </div>
+          </motion.div>
         ) : null}
 
         {!loading && !error && filteredVideos.length === 0 ? (
@@ -412,6 +428,44 @@ function HomePageContent() {
       </footer>
       <ImportChatbot />
     </main>
+  );
+}
+
+function AnimatedBrandTitle() {
+  const title = "MandarinFlow";
+  const shouldReduceMotion = useReducedMotion();
+
+  if (shouldReduceMotion) {
+    return <h1 className="text-4xl font-bold leading-tight tracking-normal text-slate-800 sm:text-5xl">{title}</h1>;
+  }
+
+  return (
+    <h1 aria-label={title} className="text-4xl font-bold leading-tight tracking-normal text-slate-800 sm:text-5xl">
+      <motion.span
+        animate="visible"
+        aria-hidden="true"
+        className="inline-flex"
+        initial="hidden"
+        variants={{ visible: { transition: { delayChildren: stagger(0.075, { startDelay: 0.18 }) } } }}
+      >
+        {Array.from(title).map((character, index) => (
+          <motion.span
+            key={`${character}-${index}`}
+            variants={{
+              hidden: { opacity: 0, y: "0.12em" },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.16, ease: "easeOut" } },
+            }}
+          >
+            {character}
+          </motion.span>
+        ))}
+        <motion.span
+          animate={{ opacity: [0, 1, 0, 1, 0] }}
+          className="ml-[3px] h-[0.9em] w-0.5 self-center bg-brand-700"
+          transition={{ delay: 0.18, duration: 1.9, ease: "linear", times: [0, 0.18, 0.4, 0.62, 1] }}
+        />
+      </motion.span>
+    </h1>
   );
 }
 
