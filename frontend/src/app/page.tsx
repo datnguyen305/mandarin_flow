@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags, UserRound } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Search, Send, Sparkles, Tags, UserRound } from "lucide-react";
 import { MotionConfig, motion, stagger, useReducedMotion } from "motion/react";
 import { Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
@@ -28,6 +28,7 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tagMenuRef = useRef<HTMLDetailsElement>(null);
+  const tabletTagMenuRef = useRef<HTMLDetailsElement>(null);
   const shouldReduceMotion = useReducedMotion();
   const [videos, setVideos] = useState<ImportedVideo[]>([]);
   const [query, setQuery] = useState("");
@@ -47,7 +48,7 @@ function HomePageContent() {
         // The vocabulary request establishes the guest cookie before other guest-scoped calls run.
         const [videoItems, vocabularyItems] = await Promise.all([listVideos(100), listVocabulary()]);
         const progressItems = await listVideoProgress();
-        setVideos(videoItems);
+        setVideos(shuffleVideos(videoItems));
         setSavedWordCounts(countSavedWordsByVideo(vocabularyItems));
         setVideoProgress(Object.fromEntries(progressItems.map((item) => [item.youtube_video_id, item])));
         const today = new Date();
@@ -76,10 +77,19 @@ function HomePageContent() {
     return options;
   }, [availableTags, selectedTag]);
   const desktopTagOptions = useMemo(() => {
-    const visible = tagOptions.slice(0, 5);
+    const visible = tagOptions.slice(0, 3);
     const selectedOption = tagOptions.find((tag) => tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi"));
 
     if (selectedOption && !visible.includes(selectedOption)) visible[visible.length - 1] = selectedOption;
+
+    return {
+      visible,
+      overflow: tagOptions.filter((tag) => !visible.includes(tag)),
+    };
+  }, [selectedTag, tagOptions]);
+  const tabletTagOptions = useMemo(() => {
+    const selectedOption = tagOptions.find((tag) => tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi"));
+    const visible = [selectedOption ?? tagOptions[0]];
 
     return {
       visible,
@@ -97,6 +107,7 @@ function HomePageContent() {
 
   function selectTag(tag: string) {
     tagMenuRef.current?.removeAttribute("open");
+    tabletTagMenuRef.current?.removeAttribute("open");
     router.replace(videoCatalogUrl(tag, 1), { scroll: false });
   }
 
@@ -132,20 +143,20 @@ function HomePageContent() {
 
   return (
     <main className="min-h-[calc(100vh-57px)] bg-rice">
-      <section className="mx-auto max-w-7xl p-4">
-        <div className="mb-8">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-100/80 px-4 py-1.5 text-sm font-semibold text-brand-800">
-            <Sparkles size={16} className="text-brand-500" />
+      <section className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
+        <div className="mb-6 sm:mb-8">
+          <div className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-100/80 px-3 py-1.5 text-xs font-semibold text-brand-800 sm:mb-4 sm:gap-2 sm:px-4 sm:text-sm">
+            <Sparkles size={15} className="shrink-0 text-brand-500 sm:h-4 sm:w-4" />
             Học qua ngữ cảnh video có sẵn
           </div>
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-4 sm:gap-5 md:flex-row md:items-start md:justify-between">
             <div className="max-w-3xl">
               <AnimatedBrandTitle />
-              <p className="mt-4 text-base leading-7 text-slate-500">
+              <p className="mt-3 text-sm leading-6 text-slate-500 sm:mt-4 sm:text-base sm:leading-7">
                 Chọn video và học tiếng Trung thông qua tương tác trực tiếp.
               </p>
             </div>
-            <div className="w-full rounded-2xl border border-cream-200 bg-cream-50 px-4 py-3 shadow-sm lg:w-[calc((100%-2rem)/3)]">
+            <div className="w-full rounded-xl border border-cream-200 bg-cream-50 px-3 py-3 shadow-sm sm:rounded-2xl sm:px-4 md:w-[calc((100%-2rem)/3)]">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-700">
                 <CalendarDays size={15} />
                 <span>Daily Learning Stats</span>
@@ -164,16 +175,53 @@ function HomePageContent() {
           </div>
         </div>
 
-        <div className="mb-5 flex scroll-mt-20 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between" data-route-scroll-anchor>
-          <div className="min-w-0 flex-1" aria-label="Lọc video theo chủ đề">
-            <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 lg:hidden">
+        <div
+          className="mb-5 grid scroll-mt-20 gap-3 md:grid-cols-3 md:items-center md:gap-4"
+          data-route-scroll-anchor
+        >
+          <div className="order-2 min-w-0 flex-1 md:order-1" aria-label="Lọc video theo chủ đề">
+            <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 md:hidden">
               <Tags size={17} className="text-brand-700" />
               <span>Lọc theo chủ đề</span>
             </div>
-            <div className="scrollbar-none flex w-full gap-2 overflow-x-auto pb-1 lg:hidden">
+            <div className="scrollbar-none -mx-3 flex w-[calc(100%+1.5rem)] gap-2 overflow-x-auto px-3 pb-1 md:hidden">
               {tagOptions.map((tag) => (
                 <TagFilterButton key={tag} tag={tag} selectedTag={selectedTag} onSelect={selectTag} />
               ))}
+            </div>
+            <div className="hidden h-12 min-w-0 items-center gap-2 md:flex lg:hidden">
+              <Tags size={16} className="shrink-0 text-brand-700" aria-label="Lọc theo chủ đề" />
+              {tabletTagOptions.visible.map((tag) => (
+                <TagFilterButton key={tag} tag={tag} selectedTag={selectedTag} onSelect={selectTag} />
+              ))}
+              {tabletTagOptions.overflow.length > 0 ? (
+                <details className="group relative shrink-0" ref={tabletTagMenuRef}>
+                  <summary
+                    aria-label="Xem thêm chủ đề"
+                    className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full border border-cream-300 bg-cream-50 text-slate-600 transition hover:border-brand-300 hover:text-brand-800 [&::-webkit-details-marker]:hidden"
+                  >
+                    <ChevronDown className="transition-transform group-open:rotate-180" size={16} />
+                  </summary>
+                  <div className="absolute left-0 top-11 z-20 min-w-40 rounded-lg border border-cream-200 bg-cream-50 p-1.5 shadow-lg">
+                    {tabletTagOptions.overflow.map((tag) => {
+                      const active = tag.toLocaleLowerCase("vi") === selectedTag.toLocaleLowerCase("vi");
+                      return (
+                        <button
+                          aria-pressed={active}
+                          className={`flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition ${
+                            active ? "bg-brand-700 font-semibold text-cream-50" : "text-slate-600 hover:bg-cream-100 hover:text-brand-800"
+                          }`}
+                          key={tag}
+                          onClick={() => selectTag(tag)}
+                          type="button"
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+              ) : null}
             </div>
             <div className="hidden h-12 min-w-0 items-center gap-2 lg:flex">
               <div className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-slate-700">
@@ -213,7 +261,34 @@ function HomePageContent() {
               ) : null}
             </div>
           </div>
-          <label className="relative block w-full shrink-0 lg:w-[calc((100%-2rem)/3)]">
+          {!loading && !error && filteredVideos.length > 6 ? (
+            <nav className="order-3 hidden items-center justify-center gap-2 md:order-2 md:flex" aria-label="Phân trang video">
+              <button
+                aria-label="Trang trước"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-cream-300 bg-cream-50 text-brand-800 transition hover:bg-cream-100 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!pagination.hasPrevious}
+                onClick={() => selectPage(pagination.page - 1)}
+                type="button"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="min-w-16 text-center text-sm font-semibold text-slate-700">
+                {pagination.page} / {pagination.totalPages}
+              </span>
+              <button
+                aria-label="Trang sau"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-cream-300 bg-cream-50 text-brand-800 transition hover:bg-cream-100 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!pagination.hasNext}
+                onClick={() => selectPage(pagination.page + 1)}
+                type="button"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </nav>
+          ) : (
+            <span className="order-3 hidden md:order-2 md:block" aria-hidden="true" />
+          )}
+          <label className="relative order-1 block w-full min-w-0 md:order-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
             <input
               className="h-12 w-full rounded-xl border border-cream-300 bg-cream-50 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
@@ -235,7 +310,7 @@ function HomePageContent() {
         ) : null}
 
         {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Đang tải video">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3" aria-label="Đang tải video">
             {Array.from({ length: 6 }, (_, index) => (
               <div className="overflow-hidden rounded-2xl border border-cream-200 bg-cream-50" key={index}>
                 <div className="aspect-video animate-pulse bg-cream-200" />
@@ -251,7 +326,7 @@ function HomePageContent() {
         {!loading && !error && filteredVideos.length > 0 ? (
           <motion.div
             animate="visible"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-4 sm:grid-cols-2 md:grid-cols-3"
             initial={shouldReduceMotion ? false : "hidden"}
             variants={{
               visible: { transition: { delayChildren: stagger(0.09) } },
@@ -262,7 +337,7 @@ function HomePageContent() {
               const watchHref = `/watch?v=${video.youtube_video_id}${progress?.current_time ? `&t=${Math.floor(progress.current_time)}` : ""}`;
               return (
               <motion.article
-                className="overflow-hidden rounded-3xl border border-cream-200 bg-cream-50 shadow-sm transition hover:border-brand-200 hover:shadow-md"
+                className="overflow-hidden rounded-2xl border border-cream-200 bg-cream-50 shadow-sm transition hover:border-brand-200 hover:shadow-md sm:rounded-3xl"
                 key={video.id}
                 variants={{
                   hidden: { opacity: 0, y: 18 },
@@ -280,19 +355,31 @@ function HomePageContent() {
                           if (event.currentTarget.src !== video.thumbnail_url) event.currentTarget.src = video.thumbnail_url ?? "";
                         }}
                         quality={95}
-                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        sizes="(min-width: 768px) 33vw, (min-width: 640px) 50vw, 100vw"
                         src={getPreferredYouTubeThumbnail(video.youtube_video_id, video.thumbnail_url) ?? video.thumbnail_url}
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center font-serif text-5xl font-bold text-cream-50">汉</div>
                     )}
+                    <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2 text-[11px] font-medium text-brand-950 sm:inset-x-3 sm:text-sm">
+                      {formatVideoDuration(video.duration_seconds) ? (
+                        <span className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/60 bg-cream-50/90 px-2 py-1 shadow-sm backdrop-blur-md">
+                          <Clock3 className="text-brand-800" size={16} strokeWidth={1.8} />
+                          <span>{formatVideoDuration(video.duration_seconds)}</span>
+                        </span>
+                      ) : null}
+                      <span className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/60 bg-[#edf3ef]/95 px-2 py-1 font-semibold text-[#365b45] shadow-sm backdrop-blur-md">
+                        <BookOpen className="shrink-0" size={16} strokeWidth={1.8} />
+                        <span>Đã lưu {savedWordCounts[video.youtube_video_id] ?? 0} từ</span>
+                      </span>
+                    </div>
                   </div>
                 </Link>
-                <div className="w-full p-4 sm:p-5">
-                  <Link className="line-clamp-2 min-h-14 text-base font-bold leading-tight text-brand-950 hover:text-brand-700 sm:text-lg" href={watchHref}>
+                <div className="w-full p-[14px] sm:p-[18px]">
+                  <Link className="line-clamp-2 min-h-10 text-sm font-bold leading-tight text-brand-950 hover:text-brand-700 sm:min-h-12 sm:text-base" href={watchHref}>
                     {video.title}
                   </Link>
-                  <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-sm text-slate-500">
+                  <div className="mt-2 flex min-h-5 items-center justify-between gap-2 text-xs text-slate-500 sm:gap-3 sm:text-sm">
                     <p className="flex min-w-0 items-center gap-1.5">
                       <UserRound className="shrink-0 text-brand-700" size={15} strokeWidth={1.8} />
                       <span className="truncate">{video.channel_name || "Không rõ tác giả"}</span>
@@ -303,22 +390,6 @@ function HomePageContent() {
                         {formatViewCount(video.view_count)}
                       </span>
                     ) : null}
-                  </div>
-                  <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-brand-950">
-                    {formatVideoDuration(video.duration_seconds) ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Clock3 className="text-brand-800" size={22} strokeWidth={1.8} />
-                        <span>{formatVideoDuration(video.duration_seconds)}</span>
-                      </span>
-                    ) : null}
-                    <span className="inline-flex items-center gap-2">
-                      <Play className="text-brand-800" size={22} strokeWidth={1.8} />
-                      <span>{progress?.current_time ? formatPlaybackTime(progress.current_time) : "Chưa học"}</span>
-                    </span>
-                    <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#edf3ef] px-3 py-2 font-semibold text-[#365b45]">
-                      <BookOpen className="shrink-0" size={22} strokeWidth={1.8} />
-                      <span>Đã lưu {savedWordCounts[video.youtube_video_id] ?? 0} từ</span>
-                    </span>
                   </div>
                 </div>
               </motion.article>
@@ -340,7 +411,7 @@ function HomePageContent() {
         ) : null}
 
         {!loading && !error && filteredVideos.length > 6 ? (
-          <nav className="mt-6 flex items-center justify-center gap-3" aria-label="Phân trang video">
+          <nav className="mt-5 flex items-center justify-center gap-2 md:hidden" aria-label="Phân trang video">
             <button
               aria-label="Trang trước"
               className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-cream-300 bg-cream-50 text-brand-800 transition hover:bg-cream-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -348,9 +419,9 @@ function HomePageContent() {
               onClick={() => selectPage(pagination.page - 1)}
               type="button"
             >
-              <ChevronLeft size={19} />
+              <ChevronLeft size={18} />
             </button>
-            <span className="min-w-20 text-center text-sm font-semibold text-slate-700">
+            <span className="min-w-16 text-center text-sm font-semibold text-slate-700">
               {pagination.page} / {pagination.totalPages}
             </span>
             <button
@@ -360,7 +431,7 @@ function HomePageContent() {
               onClick={() => selectPage(pagination.page + 1)}
               type="button"
             >
-              <ChevronRight size={19} />
+              <ChevronRight size={18} />
             </button>
           </nav>
         ) : null}
@@ -436,11 +507,11 @@ function AnimatedBrandTitle() {
   const shouldReduceMotion = useReducedMotion();
 
   if (shouldReduceMotion) {
-    return <h1 className="text-4xl font-bold leading-tight tracking-normal text-slate-800 sm:text-5xl">{title}</h1>;
+    return <h1 className="text-3xl font-bold leading-tight tracking-normal text-slate-800 sm:text-4xl lg:text-5xl">{title}</h1>;
   }
 
   return (
-    <h1 aria-label={title} className="text-4xl font-bold leading-tight tracking-normal text-slate-800 sm:text-5xl">
+    <h1 aria-label={title} className="text-3xl font-bold leading-tight tracking-normal text-slate-800 sm:text-4xl lg:text-5xl">
       <motion.span
         animate="visible"
         aria-hidden="true"
@@ -507,10 +578,15 @@ function countSavedWordsByVideo(items: SavedVocabulary[]): Record<string, number
   }, {});
 }
 
-function formatPlaybackTime(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+function shuffleVideos(videos: ImportedVideo[]): ImportedVideo[] {
+  const shuffled = [...videos];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
 
 function formatViewCount(count: number): string {
