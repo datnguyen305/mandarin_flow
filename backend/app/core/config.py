@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     yt_dlp_max_attempts: int = 2
     yt_dlp_retry_backoff_seconds: float = 1.5
     yt_dlp_socket_timeout: int = 30
+    youtube_metadata_backfill_enabled: bool = True
+    youtube_metadata_backfill_batch_size: int = 100
+    youtube_metadata_backfill_concurrency: int = 2
     guest_cookie_name: str = "mandarinflow_guest"
     guest_session_days: int = 365
     dev_access_token: str | None = None

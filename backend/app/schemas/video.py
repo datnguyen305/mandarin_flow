@@ -44,6 +44,7 @@ class VideoResponse(BaseModel):
     duration_seconds: int | None = None
     channel_name: str | None = None
     channel_id: str | None = None
+    view_count: int | None = None
     upload_date: date | None = None
     metadata_fetched_at: datetime | None = None
     language: str

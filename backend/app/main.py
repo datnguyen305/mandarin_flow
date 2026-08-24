@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.services.agent_request_service import resume_agent_executions
+from app.services.video_metadata_backfill import backfill_missing_video_metadata
 
 configure_logging()
 
@@ -18,6 +19,8 @@ app = FastAPI(title=settings.app_name)
 @app.on_event("startup")
 async def resume_agent_request_tasks() -> None:
     asyncio.create_task(resume_agent_executions())
+    if settings.youtube_metadata_backfill_enabled:
+        asyncio.create_task(backfill_missing_video_metadata())
 
 app.add_middleware(
     CORSMiddleware,

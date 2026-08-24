@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, Float, String, func
+from sqlalchemy import BigInteger, DateTime, Float, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,7 @@ class Video(Base):
     duration_seconds: Mapped[int | None] = mapped_column(nullable=True)
     channel_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     channel_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    view_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     upload_date: Mapped[date | None] = mapped_column(nullable=True)
     metadata_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     language: Mapped[str] = mapped_column(String(16), default="zh")

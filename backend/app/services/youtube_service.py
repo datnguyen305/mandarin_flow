@@ -26,6 +26,7 @@ class YouTubeMetadata:
     duration_seconds: int | None = None
     channel_name: str | None = None
     channel_id: str | None = None
+    view_count: int | None = None
     upload_date: date | None = None
     metadata_source: str = "oembed"
     metadata_fetched_at: datetime | None = None
@@ -70,6 +71,7 @@ class YouTubeService:
                 duration_seconds=self._positive_int(info.get("duration")),
                 channel_name=str(info.get("channel") or info.get("uploader") or "") or None,
                 channel_id=str(info.get("channel_id") or "") or None,
+                view_count=self._positive_int(info.get("view_count")),
                 upload_date=upload_date,
                 metadata_source="yt-dlp",
                 metadata_fetched_at=datetime.now(timezone.utc),

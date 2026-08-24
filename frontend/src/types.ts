@@ -51,6 +51,7 @@ export interface ImportedVideo {
   duration_seconds?: number | null;
   channel_name?: string | null;
   channel_id?: string | null;
+  view_count?: number | null;
   upload_date?: string | null;
   metadata_fetched_at?: string | null;
   language: string;

@@ -19,6 +19,7 @@ type Video struct {
 	DurationSeconds   *int32     `json:"duration_seconds"`
 	ChannelName       *string    `json:"channel_name"`
 	ChannelID         *string    `json:"channel_id"`
+	ViewCount         *int64     `json:"view_count"`
 	UploadDate        *time.Time `json:"upload_date"`
 	MetadataFetchedAt *time.Time `json:"metadata_fetched_at"`
 	Language          string     `json:"language"`

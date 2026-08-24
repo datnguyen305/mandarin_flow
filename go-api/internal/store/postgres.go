@@ -52,7 +52,7 @@ func (db *Postgres) TouchGuest(ctx context.Context, id string, now time.Time) er
 }
 
 func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublished bool) ([]domain.Video, error) {
-	query := `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos`
+	query := `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,view_count,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos`
 	args := []any{}
 	if !includeUnpublished {
 		query += ` WHERE processing_status='completed'`
@@ -67,7 +67,7 @@ func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublishe
 	result := []domain.Video{}
 	for rows.Next() {
 		var item domain.Video
-		if err := rows.Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.ViewCount, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -77,7 +77,7 @@ func (db *Postgres) ListVideos(ctx context.Context, limit int, includeUnpublishe
 
 func (db *Postgres) GetVideo(ctx context.Context, videoID string) (*domain.Video, error) {
 	var item domain.Video
-	err := db.pool.QueryRow(ctx, `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos WHERE youtube_video_id=$1`, videoID).Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt)
+	err := db.pool.QueryRow(ctx, `SELECT id,youtube_video_id,title,url,thumbnail_url,duration_seconds,channel_name,channel_id,view_count,upload_date,metadata_fetched_at,language,processing_status,COALESCE(tags, '[]'::jsonb),created_at FROM videos WHERE youtube_video_id=$1`, videoID).Scan(&item.ID, &item.YouTubeVideoID, &item.Title, &item.URL, &item.ThumbnailURL, &item.DurationSeconds, &item.ChannelName, &item.ChannelID, &item.ViewCount, &item.UploadDate, &item.MetadataFetchedAt, &item.Language, &item.ProcessingStatus, &item.Tags, &item.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

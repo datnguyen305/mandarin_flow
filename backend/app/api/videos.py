@@ -18,6 +18,7 @@ from app.schemas.video import CookiesUploadRequest, PlaybackPositionRequest, Pro
 from app.services.subtitle_queue import format_sse, subtitle_event_broker, subtitle_processing_queue
 from app.services.video_service import VideoService
 from app.services.video_progress_service import VideoProgressService
+from app.services.video_metadata_backfill import backfill_missing_video_metadata
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -50,6 +51,17 @@ async def list_videos(
 ) -> list[VideoResponse]:
     videos = await VideoService(db).list_recent(limit, include_unpublished=include_unpublished)
     return [VideoResponse.model_validate(video) for video in videos]
+
+
+@router.post("/metadata/backfill", status_code=status.HTTP_200_OK)
+async def backfill_video_metadata(_: None = Depends(require_dev_access)) -> dict[str, int | bool]:
+    result = await backfill_missing_video_metadata()
+    return {
+        "selected": result.selected,
+        "updated": result.updated,
+        "failed": result.failed,
+        "already_running": result.already_running,
+    }
 
 
 @router.get("/progress", response_model=list[VideoProgressResponse])

@@ -31,6 +31,7 @@ async def test_get_metadata_uses_ytdlp_without_downloading(monkeypatch) -> None:
                 "duration": 123.8,
                 "channel": "MandarinFlow",
                 "channel_id": "UC123",
+                "view_count": 1234567,
                 "upload_date": "20260823",
             }
 
@@ -48,6 +49,7 @@ async def test_get_metadata_uses_ytdlp_without_downloading(monkeypatch) -> None:
     assert metadata.duration_seconds == 123
     assert metadata.channel_name == "MandarinFlow"
     assert metadata.channel_id == "UC123"
+    assert metadata.view_count == 1234567
     assert metadata.upload_date == date(2026, 8, 23)
 
 

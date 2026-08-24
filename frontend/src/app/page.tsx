@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Play, Search, Send, Sparkles, Tags, UserRound } from "lucide-react";
 import { Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
 import { ALL_VIDEO_TAGS, filterVideos, formatVideoDuration, getVideoTags, paginateVideos, parseVideoPage, videoCatalogUrl } from "@/lib/videoCatalog";
@@ -276,7 +276,19 @@ function HomePageContent() {
                   <Link className="line-clamp-2 min-h-14 text-base font-bold leading-tight text-brand-950 hover:text-brand-700 sm:text-lg" href={watchHref}>
                     {video.title}
                   </Link>
-                  <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-brand-950">
+                  <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-sm text-slate-500">
+                    <p className="flex min-w-0 items-center gap-1.5">
+                      <UserRound className="shrink-0 text-brand-700" size={15} strokeWidth={1.8} />
+                      <span className="truncate">{video.channel_name || "Không rõ tác giả"}</span>
+                    </p>
+                    {video.view_count != null ? (
+                      <span className="flex shrink-0 items-center gap-1.5" title={`${video.view_count.toLocaleString("vi-VN")} lượt xem`}>
+                        <Eye className="text-brand-700" size={15} strokeWidth={1.8} />
+                        {formatViewCount(video.view_count)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-brand-950">
                     {formatVideoDuration(video.duration_seconds) ? (
                       <span className="inline-flex items-center gap-2">
                         <Clock3 className="text-brand-800" size={22} strokeWidth={1.8} />
@@ -445,4 +457,15 @@ function formatPlaybackTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function formatViewCount(count: number): string {
+  if (count >= 1_000_000_000) return `${formatCompactNumber(count / 1_000_000_000)} Tỷ lượt xem`;
+  if (count >= 1_000_000) return `${formatCompactNumber(count / 1_000_000)} Tr lượt xem`;
+  if (count >= 1_000) return `${formatCompactNumber(count / 1_000)} N lượt xem`;
+  return `${count.toLocaleString("vi-VN")} lượt xem`;
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(value);
 }

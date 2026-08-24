@@ -23,6 +23,15 @@ class VideoRepository:
         result = await self.db.execute(statement)
         return list(result.scalars().all())
 
+    async def list_missing_view_count(self, limit: int = 100) -> list[Video]:
+        result = await self.db.execute(
+            select(Video)
+            .where(Video.view_count.is_(None))
+            .order_by(Video.created_at.asc(), Video.id.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def get_with_subtitles(self, youtube_video_id: str) -> Video | None:
         result = await self.db.execute(
             select(Video)
@@ -42,6 +51,7 @@ class VideoRepository:
         duration_seconds: int | None = None,
         channel_name: str | None = None,
         channel_id: str | None = None,
+        view_count: int | None = None,
         upload_date: date | None = None,
         metadata_fetched_at: datetime | None = None,
     ) -> Video:
@@ -57,6 +67,7 @@ class VideoRepository:
                 duration_seconds=duration_seconds,
                 channel_name=channel_name,
                 channel_id=channel_id,
+                view_count=view_count,
                 upload_date=upload_date,
                 metadata_fetched_at=metadata_fetched_at,
             )
@@ -74,7 +85,7 @@ class VideoRepository:
                 video.language = language
                 if tags is not None:
                     video.tags = tags
-                self._merge_metadata(video, duration_seconds, channel_name, channel_id, upload_date, metadata_fetched_at)
+                self._merge_metadata(video, duration_seconds, channel_name, channel_id, view_count, upload_date, metadata_fetched_at)
                 await self.db.flush()
         else:
             video.title = title
@@ -83,7 +94,7 @@ class VideoRepository:
             video.language = language
             if tags is not None:
                 video.tags = tags
-            self._merge_metadata(video, duration_seconds, channel_name, channel_id, upload_date, metadata_fetched_at)
+            self._merge_metadata(video, duration_seconds, channel_name, channel_id, view_count, upload_date, metadata_fetched_at)
             await self.db.flush()
         return video
 
@@ -93,6 +104,7 @@ class VideoRepository:
         duration_seconds: int | None,
         channel_name: str | None,
         channel_id: str | None,
+        view_count: int | None,
         upload_date: date | None,
         metadata_fetched_at: datetime | None,
     ) -> None:
@@ -102,6 +114,8 @@ class VideoRepository:
             video.channel_name = channel_name
         if channel_id is not None:
             video.channel_id = channel_id
+        if view_count is not None:
+            video.view_count = view_count
         if upload_date is not None:
             video.upload_date = upload_date
         if metadata_fetched_at is not None:

@@ -109,6 +109,7 @@ class SubtitleService:
             duration_seconds=metadata.duration_seconds,
             channel_name=metadata.channel_name,
             channel_id=metadata.channel_id,
+            view_count=metadata.view_count,
             upload_date=metadata.upload_date,
             metadata_fetched_at=metadata.metadata_fetched_at,
         )
