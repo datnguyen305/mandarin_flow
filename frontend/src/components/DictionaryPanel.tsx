@@ -1,10 +1,12 @@
 "use client";
 
-import { AlertCircle, BookMarked, Loader2, Pause, Save, X } from "lucide-react";
+import { AlertCircle, BookMarked, GripVertical, Loader2, Pause, Save, X } from "lucide-react";
+import { type CSSProperties, type RefObject, useEffect, useState } from "react";
 import { HanziStrokeWriter } from "@/components/HanziStrokeWriter";
 import type { DictionaryEntry, SubtitleLine, SubtitleToken } from "@/types";
 
 interface Props {
+  anchorRef: RefObject<HTMLElement | null>;
   token: SubtitleToken;
   entry: DictionaryEntry | null;
   loading: boolean;
@@ -17,19 +19,97 @@ interface Props {
   saveStatus: string | null;
 }
 
-export function DictionaryPanel({ token, entry, loading, error, subtitle, onClose, onPause, onSave, saving, saveStatus }: Props) {
+export function DictionaryPanel({ anchorRef, token, entry, loading, error, subtitle, onClose, onPause, onSave, saving, saveStatus }: Props) {
+  const [panelWidth, setPanelWidth] = useState(448);
+  const [verticalBounds, setVerticalBounds] = useState({ top: 57, bottom: 8 });
   const pinyin = entry?.pinyin ?? token.pinyin ?? "";
   const meaning = entry?.meaning ?? token.meaning ?? "";
   const meanings = entry?.meanings?.length ? entry.meanings : meaning ? [{ meaning }] : [];
-  const context = entry?.context;
-  const contextualMeaning = context?.phrase_meaning ?? context?.selected_meaning ?? entry?.contextual_meaning;
   const collocations = entry?.collocations ?? [];
   const examples = entry?.examples ?? [];
   const sourceSentence = subtitle?.text ?? entry?.example_zh ?? "";
   const subtitleTranslation = cleanVietnameseExample(subtitle?.translation);
 
+  useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+
+    function syncVerticalBounds() {
+      const rect = anchor?.getBoundingClientRect();
+      if (!rect) return;
+      setVerticalBounds({
+        top: Math.round(rect.top),
+        bottom: Math.round(Math.max(0, window.innerHeight - rect.bottom)),
+      });
+    }
+
+    syncVerticalBounds();
+    const observer = new ResizeObserver(syncVerticalBounds);
+    observer.observe(anchor);
+    window.addEventListener("resize", syncVerticalBounds);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncVerticalBounds);
+    };
+  }, [anchorRef]);
+
+  function resizePanel(nextWidth: number) {
+    const viewportLimit = typeof window === "undefined" ? 720 : window.innerWidth * 0.7;
+    setPanelWidth(Math.round(Math.min(720, viewportLimit, Math.max(320, nextWidth))));
+  }
+
+  function beginResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function handlePointerMove(pointerEvent: PointerEvent) {
+      resizePanel(startWidth + startX - pointerEvent.clientX);
+    }
+
+    function finishResize() {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", finishResize);
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", finishResize, { once: true });
+  }
+
   return (
-    <aside className="fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-cream-200 bg-cream-50 shadow-2xl sm:top-[49px]">
+    <aside
+      className="fixed inset-y-0 right-0 z-30 flex w-full flex-col overflow-hidden border-l border-cream-200 bg-cream-50 shadow-2xl sm:bottom-[var(--dictionary-bottom)] sm:top-[var(--dictionary-top)] sm:w-[var(--dictionary-width)] sm:max-w-[70vw] sm:rounded-l-xl sm:border-y"
+      style={{
+        "--dictionary-width": `${panelWidth}px`,
+        "--dictionary-top": `${verticalBounds.top}px`,
+        "--dictionary-bottom": `${verticalBounds.bottom}px`,
+      } as CSSProperties}
+    >
+      <div
+        aria-label="Điều chỉnh chiều rộng từ điển nhanh"
+        aria-orientation="vertical"
+        aria-valuemax={720}
+        aria-valuemin={320}
+        aria-valuenow={panelWidth}
+        className="group absolute inset-y-0 left-0 z-10 hidden w-3 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center sm:flex"
+        onDoubleClick={() => setPanelWidth(448)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") resizePanel(panelWidth + 24);
+          if (event.key === "ArrowRight") resizePanel(panelWidth - 24);
+        }}
+        onPointerDown={beginResize}
+        role="separator"
+        tabIndex={0}
+        title="Kéo để thay đổi chiều rộng; nhấp đúp để đặt lại"
+      >
+        <span className="flex h-12 w-5 items-center justify-center rounded-full border border-cream-300 bg-cream-50 text-slate-400 shadow-sm transition group-hover:border-brand-300 group-hover:text-brand-700 group-focus:border-brand-300 group-focus:text-brand-700">
+          <GripVertical size={14} />
+        </span>
+      </div>
       <div className="border-b border-cream-200 bg-cream-100/70 px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2">
@@ -89,28 +169,6 @@ export function DictionaryPanel({ token, entry, loading, error, subtitle, onClos
               <p className="mt-1 break-words text-xl font-semibold leading-7 text-ink">Chưa có nghĩa tiếng Việt.</p>
             )}
           </section>
-
-          {context || contextualMeaning || entry?.enrichment_error ? (
-            <section className="rounded-lg border border-cream-200 bg-cream-100/50 p-3">
-              <p className="text-xs font-semibold uppercase text-slate-500">Trong câu này</p>
-              {context?.phrase ? (
-                <div className="mt-3 rounded-lg bg-cream-50 px-3 py-2">
-                  <p className="break-words font-serif text-xl font-semibold leading-8 text-ink">{context.phrase}</p>
-                  {context.phrase_pinyin ? <p className="mt-1 break-words font-mono text-sm font-semibold text-brand-700">{context.phrase_pinyin}</p> : null}
-                  {context.phrase_meaning ? <p className="mt-2 break-words text-base font-semibold leading-7 text-slate-800">{context.phrase_meaning}</p> : null}
-                </div>
-              ) : contextualMeaning ? (
-                <p className="mt-2 break-words text-base font-semibold leading-7 text-slate-800">{contextualMeaning}</p>
-              ) : null}
-              {context?.explanation ? (
-                <p className="mt-3 break-words text-sm leading-6 text-slate-600">
-                  <span className="font-semibold text-slate-700">Giải thích: </span>
-                  {context.explanation}
-                </p>
-              ) : null}
-              {entry?.enrichment_error ? <p className="mt-3 text-sm leading-6 text-amber-700">{entry.enrichment_error}</p> : null}
-            </section>
-          ) : null}
 
           {collocations.length > 0 ? (
             <section className="rounded-lg border border-cream-200 bg-cream-100/50 p-3">

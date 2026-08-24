@@ -54,6 +54,7 @@ function WatchContent() {
   const lastPlaybackPostRef = useRef({ time: -1, sentAt: 0 });
   const transcriptItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const transcriptPanelRef = useRef<HTMLDivElement | null>(null);
+  const sidebarPanelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const savedScript = window.localStorage.getItem(SUBTITLE_SCRIPT_KEY);
@@ -407,7 +408,7 @@ function WatchContent() {
       </section>
 
       <section className="min-h-0 overflow-hidden">
-        <aside className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-sm">
+        <aside className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-sm" ref={sidebarPanelRef}>
         <div className="shrink-0 border-b border-cream-200 bg-cream-100/70 p-2">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-cream-200/70 p-1 text-sm">
             <button
@@ -521,6 +522,7 @@ function WatchContent() {
           onPause={() => playerRef.current?.pause()}
           onSave={handleSave}
           saveStatus={saveStatus}
+          anchorRef={sidebarPanelRef}
         />
       ) : null}
     </main>

@@ -18,6 +18,7 @@ const subtitle: SubtitleLine = {
 };
 
 const baseProps = {
+  anchorRef: { current: null },
   token,
   loading: false,
   error: null,
@@ -38,12 +39,11 @@ describe("DictionaryPanel", () => {
     expect(screen.getByText("Phần chữ hiển thị trên video hoặc phim.")).toBeTruthy();
   });
 
-  it("renders contextual phrase information", () => {
+  it("does not render the contextual phrase section", () => {
     render(<DictionaryPanel {...baseProps} entry={entry()} />);
 
-    expect(screen.getByText("字幕提供者")).toBeTruthy();
-    expect(screen.getByText("zìmù tígōngzhě")).toBeTruthy();
-    expect(screen.getByText("người cung cấp phụ đề")).toBeTruthy();
+    expect(screen.queryByText("Trong câu này")).toBeNull();
+    expect(screen.queryByText("字幕提供者")).toBeNull();
   });
 
   it("renders collocations and examples", () => {
@@ -63,11 +63,11 @@ describe("DictionaryPanel", () => {
     expect(screen.getByText("Lưu từ")).toBeTruthy();
   });
 
-  it("shows basic meaning when enrichment has an error", () => {
+  it("shows basic meaning without the removed contextual enrichment error", () => {
     render(<DictionaryPanel {...baseProps} entry={{ word: "字幕", pinyin: "zìmù", meaning: "phụ đề", enrichment_error: "Không thể tải thêm giải thích." }} />);
 
     expect(screen.getByText("phụ đề")).toBeTruthy();
-    expect(screen.getByText("Không thể tải thêm giải thích.")).toBeTruthy();
+    expect(screen.queryByText("Không thể tải thêm giải thích.")).toBeNull();
   });
 });
 
