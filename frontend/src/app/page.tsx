@@ -244,8 +244,8 @@ function HomePageContent() {
     <main className="min-h-[calc(100vh-57px)] bg-rice">
       <section className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
         <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-stretch">
+            <div className="min-w-0">
               <div className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-100/80 px-3 py-1.5 text-xs font-semibold text-brand-800 sm:mb-4 sm:gap-2 sm:px-4 sm:text-sm">
                 <Sparkles size={15} className="shrink-0 text-brand-500 sm:h-4 sm:w-4" />
                 Học qua ngữ cảnh video có sẵn
@@ -254,17 +254,16 @@ function HomePageContent() {
               <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-base sm:leading-7">
                 Chọn video và học tiếng Trung thông qua tương tác trực tiếp.
               </p>
-              <div className="scrollbar-none -mx-3 mt-4 flex w-[calc(100%+1.5rem)] items-stretch justify-start gap-2.5 overflow-x-auto px-3 pb-1 md:mx-0 md:w-fit md:max-w-[390px] md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
+              <div className="scrollbar-none -mx-3 mt-4 flex w-[calc(100%+1.5rem)] flex-nowrap items-stretch justify-start gap-2.5 overflow-x-auto px-3 pb-1 md:mx-0 md:w-full md:px-0">
                 {HOME_FEATURES.map((feature) => (
                   <HomeFeatureCard feature={feature} key={feature.title} />
                 ))}
               </div>
             </div>
-            <div className="w-full lg:w-[48%] lg:self-stretch">
+            <div className="h-full w-full">
               <DailyLearningStats
                 learningStreak={learningStreak}
                 savedWordsToday={dailyStats.savedWords}
-                watchedVideosToday={dailyStats.watchedVideos}
                 weeklyActivity={weeklyLearningActivity}
               />
             </div>
