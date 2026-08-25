@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { FloatingVideoPlayer } from "@/components/FloatingVideoPlayer";
+import { LearningCelebrationProvider } from "@/components/LearningCelebrationProvider";
 import { RouteScrollManager } from "@/components/RouteScrollManager";
 import "./globals.css";
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
         {children}
         <FloatingVideoPlayer />
+        <LearningCelebrationProvider />
       </body>
     </html>
   );

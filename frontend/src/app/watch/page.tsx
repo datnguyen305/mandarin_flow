@@ -6,7 +6,8 @@ import Link from "next/link";
 import { ArrowLeft, BookOpen, Clock, Loader2, Search, RotateCcw, Languages } from "lucide-react";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
-import { API_BASE_URL, getRawSubtitles, lookupWord, saveVocabulary, updatePlaybackPosition } from "@/lib/api";
+import { API_BASE_URL, getRawSubtitles, listVocabulary, lookupWord, saveVocabulary, updatePlaybackPosition } from "@/lib/api";
+import { countWordsSavedToday, notifyLearningProgress } from "@/lib/learningProgress";
 import { findActiveSubtitleIndex, formatTimestamp, mergeSubtitleBatch } from "@/lib/subtitles";
 import { convertChineseText, type ChineseScript } from "@/lib/chinese-script";
 import type { DictionaryEntry, SubtitleBatch, SubtitleLine, SubtitleToken } from "@/types";
@@ -264,6 +265,8 @@ function WatchContent() {
         subtitle_id: sourceSubtitle.id,
         timestamp: sourceSubtitle.start
       });
+      const vocabularyItems = await listVocabulary();
+      notifyLearningProgress(vocabularyItems.length, true, countWordsSavedToday(vocabularyItems));
       setSaveStatus("Đã lưu vào sổ từ vựng");
     } catch (exc) {
       setSaveStatus(exc instanceof Error ? exc.message : "Không thể lưu từ này");

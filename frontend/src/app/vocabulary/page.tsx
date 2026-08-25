@@ -5,6 +5,7 @@ import { AlertCircle, ChevronDown, ExternalLink, Loader2, Plus, Trash2 } from "l
 import { Fragment, useEffect, useState } from "react";
 import { deleteVocabulary, listVocabulary, lookupWord } from "@/lib/api";
 import { formatTimestamp } from "@/lib/subtitles";
+import { countWordsSavedToday, notifyLearningProgress } from "@/lib/learningProgress";
 import type { DictionaryEntry, SavedVocabulary } from "@/types";
 
 export default function VocabularyPage() {
@@ -38,6 +39,8 @@ export default function VocabularyPage() {
     setDeletingId(id);
     try {
       await deleteVocabulary(id);
+      const remainingItems = items.filter((item) => item.id !== id);
+      notifyLearningProgress(remainingItems.length, false, countWordsSavedToday(remainingItems));
     } catch (exc) {
       setItems((current) => [removedItem, ...current]);
       setError(exc instanceof Error ? exc.message : "Không thể xóa từ vựng.");

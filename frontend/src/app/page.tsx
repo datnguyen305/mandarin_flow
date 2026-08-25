@@ -3,16 +3,54 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Search, Send, Sparkles, Tags, UserRound } from "lucide-react";
+import { Bookmark, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Flame, Mail, MessageSquareText, PartyPopper, Search, Send, Sparkles, Tags, UserRound, type LucideIcon } from "lucide-react";
 import { MotionConfig, motion, stagger, useReducedMotion } from "motion/react";
-import { Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
 import { ALL_VIDEO_TAGS, filterVideos, formatVideoDuration, getVideoTags, paginateVideos, parseVideoPage, videoCatalogUrl } from "@/lib/videoCatalog";
 import { getPreferredYouTubeThumbnail } from "@/lib/youtubeThumbnail";
 import type { ImportedVideo, SavedVocabulary, VideoProgress } from "@/types";
 import { ImportChatbot } from "@/components/ImportChatbot";
+import {
+  LEARNING_PROGRESS_EVENT,
+  countWordsSavedToday,
+  nextWordMilestone,
+  notifyLearningProgress,
+  readLatestLearningProgress,
+  type LearningProgressDetail,
+  wordMilestoneProgress,
+} from "@/lib/learningProgress";
 
 const FEEDBACK_EMAIL = process.env.NEXT_PUBLIC_FEEDBACK_EMAIL ?? "";
+const LEARNING_STREAK_STORAGE_KEY = "mandarinflow:learning-streak";
+const HOME_FEATURES: HomeFeature[] = [
+  {
+    description: "Học tiếng Trung trực tiếp qua video và phụ đề.",
+    href: "#videos",
+    icon: BookOpen,
+    iconClassName: "bg-rose-100 text-rose-700",
+    title: "Học qua ngữ cảnh",
+  },
+  {
+    description: "Nhấn vào từ để xem nghĩa, pinyin và cách đọc.",
+    icon: Search,
+    iconClassName: "bg-amber-100 text-amber-700",
+    title: "Tra cứu nhanh",
+  },
+  {
+    description: "Lưu từ mới để xem lại và xây dựng vốn từ mỗi ngày.",
+    href: "/vocabulary",
+    icon: Bookmark,
+    iconClassName: "bg-emerald-100 text-emerald-700",
+    title: "Lưu từ vựng",
+  },
+  {
+    description: "Theo dõi từ đã lưu, video đã học và chuỗi ngày học.",
+    icon: ChartNoAxesColumnIncreasing,
+    iconClassName: "bg-violet-100 text-violet-700",
+    title: "Theo dõi tiến độ",
+  },
+];
 
 export default function HomePage() {
   return (
@@ -37,6 +75,7 @@ function HomePageContent() {
   const [savedWordCounts, setSavedWordCounts] = useState<Record<string, number>>({});
   const [videoProgress, setVideoProgress] = useState<Record<string, VideoProgress>>({});
   const [dailyStats, setDailyStats] = useState({ savedWords: 0, watchedVideos: 0 });
+  const [learningStreak, setLearningStreak] = useState(1);
   const [feedbackName, setFeedbackName] = useState("");
   const [feedbackContact, setFeedbackContact] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -51,10 +90,14 @@ function HomePageContent() {
         setVideos(shuffleVideos(videoItems));
         setSavedWordCounts(countSavedWordsByVideo(vocabularyItems));
         setVideoProgress(Object.fromEntries(progressItems.map((item) => [item.youtube_video_id, item])));
+        const streakResult = updateLearningStreak();
+        setLearningStreak(streakResult.streak);
+        const savedWordsToday = countWordsSavedToday(vocabularyItems);
+        notifyLearningProgress(vocabularyItems.length, false, savedWordsToday);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         setDailyStats({
-          savedWords: vocabularyItems.filter((item) => new Date(item.created_at) >= today).length,
+          savedWords: savedWordsToday,
           watchedVideos: progressItems.filter((item) => new Date(item.last_watched_at) >= today && item.current_time > 0).length,
         });
       } catch (exc) {
@@ -65,6 +108,61 @@ function HomePageContent() {
     }
 
     loadHomeData();
+  }, []);
+
+  useEffect(() => {
+    function handleProgress(event: Event) {
+      const detail = (event as CustomEvent<LearningProgressDetail>).detail;
+      if (!Number.isFinite(detail?.savedWordsToday)) return;
+      setDailyStats((current) => ({ ...current, savedWords: detail.savedWordsToday! }));
+    }
+
+    window.addEventListener(LEARNING_PROGRESS_EVENT, handleProgress);
+    const latestProgress = readLatestLearningProgress();
+    const restoreTimeout = Number.isFinite(latestProgress?.savedWordsToday)
+      ? window.setTimeout(
+          () => setDailyStats((current) => ({ ...current, savedWords: latestProgress!.savedWordsToday! })),
+          0,
+        )
+      : null;
+    return () => {
+      window.removeEventListener(LEARNING_PROGRESS_EVENT, handleProgress);
+      if (restoreTimeout !== null) window.clearTimeout(restoreTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    let refreshing = false;
+
+    async function refreshVocabularyProgress() {
+      if (refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
+      try {
+        const vocabularyItems = await listVocabulary();
+        setSavedWordCounts(countSavedWordsByVideo(vocabularyItems));
+        setDailyStats((current) => ({
+          ...current,
+          savedWords: countWordsSavedToday(vocabularyItems),
+        }));
+      } catch {
+        // The initial page request remains responsible for displaying load errors.
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") void refreshVocabularyProgress();
+    }
+
+    window.addEventListener("focus", refreshVocabularyProgress);
+    window.addEventListener("pageshow", refreshVocabularyProgress);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refreshVocabularyProgress);
+      window.removeEventListener("pageshow", refreshVocabularyProgress);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const requestedTag = searchParams.get("tag")?.trim() || ALL_VIDEO_TAGS;
@@ -98,6 +196,15 @@ function HomePageContent() {
   }, [selectedTag, tagOptions]);
   const filteredVideos = useMemo(() => filterVideos(videos, selectedTag, query), [query, selectedTag, videos]);
   const pagination = useMemo(() => paginateVideos(filteredVideos, requestedPage), [filteredVideos, requestedPage]);
+  const savedWordsToday = dailyStats.savedWords;
+  const nextMilestone = nextWordMilestone(savedWordsToday);
+  const progress = Math.min(Math.max(wordMilestoneProgress(savedWordsToday), 0), 100);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log({ savedWords: savedWordsToday, nextMilestone, progress });
+    }
+  }, [nextMilestone, progress, savedWordsToday]);
 
   useEffect(() => {
     if (!loading && pagination.page !== requestedPage) {
@@ -145,21 +252,32 @@ function HomePageContent() {
     <main className="min-h-[calc(100vh-57px)] bg-rice">
       <section className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
         <div className="mb-6 sm:mb-8">
-          <div className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-100/80 px-3 py-1.5 text-xs font-semibold text-brand-800 sm:mb-4 sm:gap-2 sm:px-4 sm:text-sm">
-            <Sparkles size={15} className="shrink-0 text-brand-500 sm:h-4 sm:w-4" />
-            Học qua ngữ cảnh video có sẵn
-          </div>
           <div className="flex flex-col gap-4 sm:gap-5 md:flex-row md:items-start md:justify-between">
-            <div className="max-w-3xl">
+            <div className="min-w-0 flex-1">
+              <div className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-100/80 px-3 py-1.5 text-xs font-semibold text-brand-800 sm:mb-4 sm:gap-2 sm:px-4 sm:text-sm">
+                <Sparkles size={15} className="shrink-0 text-brand-500 sm:h-4 sm:w-4" />
+                Học qua ngữ cảnh video có sẵn
+              </div>
               <AnimatedBrandTitle />
-              <p className="mt-3 text-sm leading-6 text-slate-500 sm:mt-4 sm:text-base sm:leading-7">
+              <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-base sm:leading-7">
                 Chọn video và học tiếng Trung thông qua tương tác trực tiếp.
               </p>
+              <div className="scrollbar-none -mx-3 mt-4 flex w-[calc(100%+1.5rem)] items-stretch justify-start gap-2.5 overflow-x-auto px-3 pb-1 md:mx-0 md:w-fit md:max-w-[390px] md:flex-wrap md:overflow-visible md:px-0 md:pb-0 xl:max-w-none xl:flex-nowrap">
+                {HOME_FEATURES.map((feature) => (
+                  <HomeFeatureCard feature={feature} key={feature.title} />
+                ))}
+              </div>
             </div>
-            <div className="w-full rounded-xl border border-cream-200 bg-cream-50 px-3 py-3 shadow-sm sm:rounded-2xl sm:px-4 md:w-[calc((100%-2rem)/3)]">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-700">
+            <div className="w-full overflow-hidden rounded-xl border border-cream-200 bg-cream-50 px-3 py-3 shadow-sm sm:rounded-2xl sm:px-4 md:w-[calc((100%-2rem)/3)] md:self-stretch">
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-brand-700">
+                <span className="flex min-w-0 items-center gap-2">
                 <CalendarDays size={15} />
                 <span>Daily Learning Stats</span>
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fff1d6] px-2 py-1 text-[11px] normal-case text-[#a65a20]">
+                  <Flame size={13} fill="currentColor" />
+                  {learningStreak} ngày
+                </span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -171,6 +289,29 @@ function HomePageContent() {
                   <span className="mt-1 block text-xs text-slate-500">Video đã học hôm nay</span>
                 </div>
               </div>
+              <div className="mt-3 border-t border-cream-200 pt-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <PartyPopper size={13} className="text-brand-700" />
+                    Mốc pháo hoa tiếp theo
+                  </span>
+                  <strong className="text-brand-800">{nextMilestone} từ</strong>
+                </div>
+                <div
+                  aria-label={`${savedWordsToday} trên ${nextMilestone} từ`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={progress}
+                  className="h-2 w-full overflow-hidden rounded-full bg-brand-100"
+                  role="progressbar"
+                >
+                  <div
+                    className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
+                    data-testid="daily-word-progress-fill"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -178,6 +319,7 @@ function HomePageContent() {
         <div
           className="mb-5 grid scroll-mt-20 gap-3 md:grid-cols-3 md:items-center md:gap-4"
           data-route-scroll-anchor
+          id="videos"
         >
           <div className="order-2 min-w-0 flex-1 md:order-1" aria-label="Lọc video theo chủ đề">
             <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 md:hidden">
@@ -538,6 +680,106 @@ function AnimatedBrandTitle() {
       </motion.span>
     </h1>
   );
+}
+
+function updateLearningStreak(): { shouldCelebrate: boolean; streak: number } {
+  const today = localDateKey(new Date());
+
+  try {
+    const stored = window.localStorage.getItem(LEARNING_STREAK_STORAGE_KEY);
+    const previous = stored ? (JSON.parse(stored) as LearningStreakRecord) : null;
+
+    if (previous?.lastVisit === today) {
+      return { shouldCelebrate: false, streak: Math.max(previous.streak, 1) };
+    }
+
+    const isConsecutive = previous ? daysBetween(previous.lastVisit, today) === 1 : false;
+    const streak = isConsecutive ? previous!.streak + 1 : 1;
+    const shouldCelebrate = streak === 2 && previous?.lastCelebratedStreak !== 2;
+    const nextRecord: LearningStreakRecord = {
+      lastCelebratedStreak: shouldCelebrate ? 2 : isConsecutive ? previous?.lastCelebratedStreak ?? 0 : 0,
+      lastVisit: today,
+      streak,
+    };
+    window.localStorage.setItem(LEARNING_STREAK_STORAGE_KEY, JSON.stringify(nextRecord));
+    return { shouldCelebrate, streak };
+  } catch {
+    return { shouldCelebrate: false, streak: 1 };
+  }
+}
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function daysBetween(start: string, end: string): number {
+  const startTime = Date.parse(`${start}T00:00:00Z`);
+  const endTime = Date.parse(`${end}T00:00:00Z`);
+  return Math.round((endTime - startTime) / 86_400_000);
+}
+
+type LearningStreakRecord = {
+  lastCelebratedStreak: number;
+  lastVisit: string;
+  streak: number;
+};
+
+type HomeFeature = {
+  description: string;
+  href?: string;
+  icon: LucideIcon;
+  iconClassName: string;
+  title: string;
+};
+
+function HomeFeatureCard({ feature }: { feature: HomeFeature }) {
+  const Icon = feature.icon;
+  const className =
+    "flex h-[75px] w-[190px] shrink-0 items-center gap-2 rounded-xl border border-cream-200 bg-cream-50 p-2 shadow-sm transition-colors";
+  const content = (
+    <>
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${feature.iconClassName}`}>
+        <Icon aria-hidden="true" size={17} strokeWidth={1.9} />
+      </span>
+      <span className="min-w-0">
+        <strong className="block text-xs font-semibold leading-4 text-slate-800">{feature.title}</strong>
+        <span className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{feature.description}</span>
+      </span>
+    </>
+  );
+
+  if (feature.href) {
+    const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      if (!feature.href?.startsWith("#") || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const target = document.getElementById(feature.href.slice(1));
+      if (!target) return;
+
+      event.preventDefault();
+      window.history.replaceState(window.history.state, "", feature.href);
+      target.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    };
+
+    return (
+      <Link
+        className={`${className} cursor-pointer hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200`}
+        href={feature.href}
+        onClick={handleClick}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <article className={className}>{content}</article>;
 }
 
 function HomePageLoading() {
