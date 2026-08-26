@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Library, Palette, Home } from "lucide-react";
+import { BookOpen, Home, Library, Palette, Search } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 const THEME_KEY = "fluentmandarin:pastel-theme";
@@ -11,6 +11,7 @@ const THEME_EVENT = "pastel-theme-updated";
 const navItems = [
   { href: "/", label: "Trang chủ", icon: Home },
   { href: "/", label: "Video", icon: Library, watchOnly: true },
+  { href: "/dictionary", label: "Tra từ", icon: Search },
   { href: "/vocabulary", label: "Từ vựng", icon: BookOpen }
 ];
 
@@ -53,7 +54,7 @@ export function AppHeader() {
 
         <div
           className={`order-3 grid w-full gap-1 rounded-xl bg-cream-200/70 p-1 text-sm font-medium text-slate-600 sm:order-none sm:w-auto lg:absolute lg:left-1/2 lg:-translate-x-1/2 ${
-            visibleNavItems.length === 3 ? "grid-cols-3" : "grid-cols-2"
+            visibleNavItems.length === 4 ? "grid-cols-4" : "grid-cols-3"
           }`}
         >
           {visibleNavItems.map((item) => {
@@ -66,7 +67,7 @@ export function AppHeader() {
                   active ? "bg-cream-50 font-semibold text-brand-800 shadow-sm" : "hover:bg-cream-100 hover:text-brand-700"
                 }`}
                 href={href}
-                key={item.href}
+                key={item.label}
               >
                 <Icon size={16} />
                 {item.label}

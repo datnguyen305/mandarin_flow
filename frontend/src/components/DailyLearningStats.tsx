@@ -49,7 +49,7 @@ export function DailyLearningStats({ learningStreak, savedWordsToday, weeklyActi
   const maxWeeklyCount = Math.max(1, ...weeklyActivity.map((day) => day.count));
 
   return (
-    <section className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 px-3 py-3 shadow-sm sm:rounded-2xl sm:px-4">
+    <section className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 px-4 py-3 shadow-sm sm:rounded-2xl">
       <header className="mb-2 flex items-center justify-between gap-2 text-sm font-semibold uppercase tracking-wider text-brand-700">
         <span className="flex min-w-0 flex-1 items-center justify-start gap-2 text-left">
           <CalendarDays aria-hidden="true" size={16} />

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bookmark, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Search, Send, Sparkles, Tags, UserRound, type LucideIcon } from "lucide-react";
+import { Bookmark, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, Mail, MessageSquareText, Search, Send, Sparkles, Tags, UserRound, type LucideIcon } from "lucide-react";
 import { MotionConfig, motion, stagger, useReducedMotion } from "motion/react";
 import { Suspense, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
@@ -32,8 +32,11 @@ const HOME_FEATURES: HomeFeature[] = [
   },
   {
     description: "Nhấn vào từ để xem nghĩa, pinyin và cách đọc.",
+    href: "/dictionary",
     icon: Search,
     iconClassName: "bg-amber-100 text-amber-700",
+    iconSize: 16,
+    iconStrokeWidth: 2,
     title: "Tra cứu nhanh",
   },
   {
@@ -42,12 +45,6 @@ const HOME_FEATURES: HomeFeature[] = [
     icon: Bookmark,
     iconClassName: "bg-emerald-100 text-emerald-700",
     title: "Lưu từ vựng",
-  },
-  {
-    description: "Theo dõi từ đã lưu, video đã học và chuỗi ngày học.",
-    icon: ChartNoAxesColumnIncreasing,
-    iconClassName: "bg-violet-100 text-violet-700",
-    title: "Theo dõi tiến độ",
   },
 ];
 
@@ -686,6 +683,8 @@ type HomeFeature = {
   href?: string;
   icon: LucideIcon;
   iconClassName: string;
+  iconSize?: number;
+  iconStrokeWidth?: number;
   title: string;
 };
 
@@ -696,7 +695,11 @@ function HomeFeatureCard({ feature }: { feature: HomeFeature }) {
   const content = (
     <>
       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${feature.iconClassName}`}>
-        <Icon aria-hidden="true" size={17} strokeWidth={1.9} />
+        <Icon
+          aria-hidden="true"
+          size={feature.iconSize ?? 17}
+          strokeWidth={feature.iconStrokeWidth ?? 1.9}
+        />
       </span>
       <span className="min-w-0">
         <strong className="block text-xs font-semibold leading-4 text-slate-800">{feature.title}</strong>
