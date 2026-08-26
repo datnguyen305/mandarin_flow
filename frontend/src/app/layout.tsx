@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
+import { Smartphone } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { FloatingVideoPlayer } from "@/components/FloatingVideoPlayer";
 import { LearningCelebrationProvider } from "@/components/LearningCelebrationProvider";
@@ -35,6 +36,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Suspense>
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 sm:hidden">
           Hãy dùng máy tính để đem lại trải nghiệm tốt hơn
+        </div>
+        <div className="mobile-landscape-warning" role="status">
+          <Smartphone aria-hidden="true" size={34} />
+          <p>Vui lòng xoay dọc điện thoại để sử dụng MandarinFlow.</p>
         </div>
         {children}
         <FloatingVideoPlayer />

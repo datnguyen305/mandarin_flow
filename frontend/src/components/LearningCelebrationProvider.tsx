@@ -87,14 +87,14 @@ export function LearningCelebrationProvider() {
               ))}
           <motion.div
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="absolute left-1/2 top-20 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-3 rounded-xl border border-brand-200 bg-cream-50 px-4 py-3 text-brand-900 shadow-xl"
+            className="absolute left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] hidden w-[calc(100vw-1rem)] max-w-md -translate-x-1/2 items-start gap-2.5 rounded-xl border border-brand-200 bg-cream-50 px-3 py-2.5 text-brand-900 shadow-xl sm:top-20 sm:flex sm:w-[calc(100%-2rem)] sm:items-center sm:gap-3 sm:px-4 sm:py-3"
             exit={{ opacity: 0, scale: 0.96, y: -12 }}
             initial={{ opacity: 0, scale: 0.94, y: -16 }}
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#fff1d6] text-[#a65a20]">
               <PartyPopper size={21} />
             </span>
-            <p className="text-sm font-semibold leading-5">{message}</p>
+            <p className="min-w-0 break-words text-left text-sm font-semibold leading-5">{message}</p>
           </motion.div>
         </motion.div>
       ) : null}

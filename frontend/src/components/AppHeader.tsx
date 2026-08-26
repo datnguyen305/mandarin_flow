@@ -102,11 +102,11 @@ export function AppHeader() {
         </div>
 
         <div className="ml-auto inline-flex items-center justify-end">
-          <div className="inline-flex items-center rounded-xl border border-cream-200 bg-cream-100/80 p-1.5 shadow-sm">
+          <div className="inline-flex items-center rounded-xl border border-cream-200 bg-cream-100/80 p-1 sm:p-1.5 shadow-sm">
             <button
               aria-expanded={paletteOpen}
               aria-label={paletteOpen ? "Thu gọn bảng màu" : "Mở bảng màu"}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-800 transition hover:bg-cream-200 hover:text-brand-900"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-800 transition hover:bg-cream-200 hover:text-brand-900 sm:h-8 sm:w-8"
               onClick={() => setPaletteOpen((open) => !open)}
               title={paletteOpen ? "Thu gọn bảng màu" : "Mở bảng màu"}
               type="button"
