@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Clock, Loader2, Search, RotateCcw, Languages } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Clock, Loader2, Search, RotateCcw, Languages } from "lucide-react";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
+import { MobileWordMeaningPopup } from "@/components/MobileWordMeaningPopup";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { API_BASE_URL, getRawSubtitles, listVocabulary, lookupWord, saveVocabulary, updatePlaybackPosition } from "@/lib/api";
 import { countWordsSavedToday, notifyLearningProgress } from "@/lib/learningProgress";
@@ -152,6 +153,33 @@ function WatchContent() {
     document.addEventListener("pointerup", finishResize, { once: true });
   }
 
+  function beginMobileResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (window.matchMedia("(min-width: 768px)").matches) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const leftColumn = leftColumnRef.current;
+    if (!leftColumn) return;
+
+    const rect = leftColumn.getBoundingClientRect();
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      const videoHeight = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      applyWatchLayout({ ...layoutRef.current, videoHeight: clamp(videoHeight, 32, 68) });
+    }
+
+    function finishResize() {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", finishResize);
+      document.body.style.userSelect = previousUserSelect;
+      persistWatchLayout();
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", finishResize, { once: true });
+  }
+
   useEffect(() => {
     if (!videoId) return;
     saveLastWatchHref(videoId);
@@ -252,6 +280,20 @@ function WatchContent() {
     }
   }
 
+  function navigateSubtitle(direction: -1 | 1) {
+    const currentIndex = activeIndex >= 0 ? activeIndex : direction > 0 ? -1 : 0;
+    const targetIndex = currentIndex + direction;
+    const targetSubtitle = subtitles[targetIndex];
+    if (!targetSubtitle) return;
+
+    setSelectedToken(null);
+    setSelectedSubtitle(null);
+    setDictionaryEntry(null);
+    setSaveStatus(null);
+    setActiveIndex(targetIndex);
+    playerRef.current?.seekTo(targetSubtitle.start);
+  }
+
   async function handleSave() {
     const sourceSubtitle = selectedSubtitle ?? activeSubtitle;
     if (!selectedToken || !sourceSubtitle?.id) return;
@@ -281,7 +323,7 @@ function WatchContent() {
 
   return (
     <main
-      className="relative mx-auto grid h-[calc(100vh-49px)] max-h-[calc(100vh-49px)] max-w-[1600px] grid-cols-1 gap-3 overflow-y-auto px-3 py-2 lg:grid-cols-[minmax(0,var(--watch-left-width))_minmax(0,1fr)] lg:gap-2 lg:overflow-hidden"
+      className="relative mx-auto grid h-[calc(100dvh-116px)] max-h-[calc(100dvh-116px)] max-w-[1600px] grid-cols-1 gap-3 overflow-y-auto px-3 py-2 sm:h-[calc(100dvh-61px)] sm:max-h-[calc(100dvh-61px)] lg:grid-cols-[minmax(0,var(--watch-left-width))_minmax(0,1fr)] lg:gap-2 lg:overflow-hidden"
       ref={workspaceRef}
       style={{
         "--watch-left-width": `${watchLayout.leftWidth}%`,
@@ -289,7 +331,7 @@ function WatchContent() {
       } as CSSProperties}
     >
       <section
-        className="grid min-h-0 grid-rows-[auto_auto] gap-3 overflow-visible lg:grid-rows-[minmax(0,var(--watch-video-height))_minmax(0,1fr)] lg:gap-2 lg:overflow-hidden"
+        className="relative grid min-h-0 grid-rows-[minmax(0,var(--watch-video-height))_minmax(0,1fr)] gap-3 overflow-hidden lg:gap-2"
         ref={leftColumnRef}
       >
         <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-lg">
@@ -326,7 +368,7 @@ function WatchContent() {
                 <RotateCcw size={13} />
                 Layout
               </button>
-              <Link className="inline-flex h-7 items-center gap-1 rounded-md bg-brand-700 px-2 text-[11px] font-semibold text-cream-50 hover:bg-brand-800" href="/vocabulary">
+              <Link className="hidden h-7 items-center gap-1 rounded-md bg-brand-700 px-2 text-[11px] font-semibold text-cream-50 hover:bg-brand-800 sm:inline-flex" href="/vocabulary">
                 <BookOpen size={13} />
                 Wordbank
               </Link>
@@ -340,6 +382,26 @@ function WatchContent() {
               Phụ đề tương tác
             </span>
             <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-cream-300 bg-cream-100 p-0.5 md:hidden" aria-label="Chọn câu phụ đề">
+                <button
+                  aria-label="Câu phụ đề trước"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-600 transition hover:bg-cream-50 hover:text-brand-800 disabled:cursor-not-allowed disabled:opacity-35"
+                  disabled={activeIndex <= 0}
+                  onClick={() => navigateSubtitle(-1)}
+                  type="button"
+                >
+                  <ChevronLeft size={17} />
+                </button>
+                <button
+                  aria-label="Câu phụ đề sau"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-600 transition hover:bg-cream-50 hover:text-brand-800 disabled:cursor-not-allowed disabled:opacity-35"
+                  disabled={subtitles.length === 0 || activeIndex >= subtitles.length - 1}
+                  onClick={() => navigateSubtitle(1)}
+                  type="button"
+                >
+                  <ChevronRight size={17} />
+                </button>
+              </div>
               <span className="hidden text-[11px] text-slate-400 sm:inline">Bấm từ để xem nghĩa</span>
               <div className="inline-flex items-center gap-0.5 rounded-lg border border-cream-300 bg-cream-100 p-0.5" aria-label="Chọn dạng chữ phụ đề">
                 <Languages size={14} className="mx-1 text-slate-500" />
@@ -408,9 +470,28 @@ function WatchContent() {
           ) : null}
           </div>
         </div>
+        <div
+          aria-label="Điều chỉnh kích thước video và phụ đề"
+          aria-orientation="horizontal"
+          aria-valuemax={68}
+          aria-valuemin={32}
+          aria-valuenow={watchLayout.videoHeight}
+          className="absolute inset-x-0 z-20 flex h-5 -translate-y-1/2 touch-none cursor-row-resize items-center justify-center md:hidden"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowUp") nudgeResize("horizontal", -2);
+            if (event.key === "ArrowDown") nudgeResize("horizontal", 2);
+          }}
+          onPointerDown={beginMobileResize}
+          role="separator"
+          style={{ top: `var(--watch-video-height)` }}
+          tabIndex={0}
+          title="Kéo để thay đổi kích thước video và phụ đề"
+        >
+          <span className="h-1.5 w-14 rounded-full border border-cream-300 bg-cream-50 shadow-sm" />
+        </div>
       </section>
 
-      <section className="min-h-0 overflow-hidden">
+      <section className="hidden min-h-0 overflow-hidden md:block">
         <aside className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-sm" ref={sidebarPanelRef}>
         <div className="shrink-0 border-b border-cream-200 bg-cream-100/70 p-2">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-cream-200/70 p-1 text-sm">
@@ -511,22 +592,41 @@ function WatchContent() {
         </div>
       </div>
       {selectedToken ? (
-        <DictionaryPanel
-          token={selectedToken}
-          entry={dictionaryEntry}
-          loading={dictionaryLoading}
-          error={dictionaryError}
-          subtitle={selectedSubtitle ?? activeSubtitle}
-          saving={saving}
-          onClose={() => {
-            setSelectedToken(null);
-            setDictionaryError(null);
-          }}
-          onPause={() => playerRef.current?.pause()}
-          onSave={handleSave}
-          saveStatus={saveStatus}
-          anchorRef={sidebarPanelRef}
-        />
+        <>
+          <MobileWordMeaningPopup
+            entry={dictionaryEntry}
+            error={dictionaryError}
+            loading={dictionaryLoading}
+            onClose={() => {
+              setSelectedToken(null);
+              setDictionaryError(null);
+            }}
+            onSave={handleSave}
+            saveStatus={saveStatus}
+            saving={saving}
+            script={subtitleScript}
+            token={selectedToken}
+          />
+          <div className="hidden md:block">
+            <DictionaryPanel
+              token={selectedToken}
+              entry={dictionaryEntry}
+              loading={dictionaryLoading}
+              error={dictionaryError}
+              subtitle={selectedSubtitle ?? activeSubtitle}
+              saving={saving}
+              onClose={() => {
+                setSelectedToken(null);
+                setDictionaryError(null);
+              }}
+              onPause={() => playerRef.current?.pause()}
+              onSave={handleSave}
+              saveStatus={saveStatus}
+              script={subtitleScript}
+              anchorRef={sidebarPanelRef}
+            />
+          </div>
+        </>
       ) : null}
     </main>
   );

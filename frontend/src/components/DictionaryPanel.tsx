@@ -3,6 +3,7 @@
 import { AlertCircle, BookMarked, GripVertical, Loader2, Pause, Save, X } from "lucide-react";
 import { type CSSProperties, type RefObject, useEffect, useState } from "react";
 import { HanziStrokeWriter } from "@/components/HanziStrokeWriter";
+import { convertChineseText, type ChineseScript } from "@/lib/chinese-script";
 import type { DictionaryEntry, SubtitleLine, SubtitleToken } from "@/types";
 
 interface Props {
@@ -17,9 +18,10 @@ interface Props {
   onSave: () => void;
   saving: boolean;
   saveStatus: string | null;
+  script: ChineseScript;
 }
 
-export function DictionaryPanel({ anchorRef, token, entry, loading, error, subtitle, onClose, onPause, onSave, saving, saveStatus }: Props) {
+export function DictionaryPanel({ anchorRef, token, entry, loading, error, subtitle, onClose, onPause, onSave, saving, saveStatus, script }: Props) {
   const [panelWidth, setPanelWidth] = useState(448);
   const [verticalBounds, setVerticalBounds] = useState({ top: 57, bottom: 8 });
   const pinyin = entry?.pinyin ?? token.pinyin ?? "";
@@ -29,6 +31,7 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
   const examples = entry?.examples ?? [];
   const sourceSentence = subtitle?.text ?? entry?.example_zh ?? "";
   const subtitleTranslation = cleanVietnameseExample(subtitle?.translation);
+  const displayWord = convertChineseText(token.text, script);
 
   useEffect(() => {
     const anchor = anchorRef.current;
@@ -37,6 +40,10 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
     function syncVerticalBounds() {
       const rect = anchor?.getBoundingClientRect();
       if (!rect) return;
+      if (rect.width === 0 || rect.height === 0) {
+        setVerticalBounds({ top: 0, bottom: 0 });
+        return;
+      }
       setVerticalBounds({
         top: Math.round(rect.top),
         bottom: Math.round(Math.max(0, window.innerHeight - rect.bottom)),
@@ -126,13 +133,13 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
         <div className="mb-5 grid gap-3 rounded-lg border border-cream-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="break-words font-serif text-5xl font-bold leading-tight text-slate-800">{token.text}</h2>
+              <h2 className="break-words font-serif text-5xl font-bold leading-tight text-slate-800">{displayWord}</h2>
               {pinyin ? <p className="mt-2 break-words font-mono text-xl font-semibold text-brand-700">{pinyin}</p> : null}
             </div>
             {entry?.part_of_speech ? <span className="shrink-0 rounded-md bg-brand-100 px-2 py-1 text-xs font-semibold text-brand-800">{entry.part_of_speech}</span> : null}
           </div>
           <div className="hidden sm:block">
-            <HanziStrokeWriter key={token.text} text={token.text} compact />
+            <HanziStrokeWriter key={displayWord} text={displayWord} compact />
           </div>
         </div>
 
@@ -176,7 +183,7 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
               <div className="mt-3 space-y-2">
                 {collocations.map((item) => (
                   <div className="rounded-lg bg-cream-50 px-3 py-2" key={`${item.text}-${item.pinyin}`}>
-                    <p className="break-words font-serif text-lg font-semibold leading-7 text-ink">{item.text}</p>
+                    <p className="break-words font-serif text-lg font-semibold leading-7 text-ink">{convertChineseText(item.text, script)}</p>
                     <p className="mt-1 break-words font-mono text-sm font-semibold text-brand-700">{item.pinyin}</p>
                     <p className="mt-1 break-words text-sm leading-6 text-slate-700">{item.meaning}</p>
                   </div>
@@ -191,7 +198,7 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
               <div className="mt-3 space-y-3">
                 {examples.map((item) => (
                   <div className="rounded-lg bg-cream-50 px-3 py-2" key={`${item.chinese}-${item.pinyin}`}>
-                    <p className="break-words font-serif text-lg font-semibold leading-8 text-ink">{item.chinese}</p>
+                    <p className="break-words font-serif text-lg font-semibold leading-8 text-ink">{convertChineseText(item.chinese, script)}</p>
                     <p className="mt-1 break-words font-mono text-sm font-semibold text-brand-700">{item.pinyin}</p>
                     <p className="mt-2 break-words text-sm leading-6 text-slate-700">{item.vietnamese}</p>
                   </div>
@@ -203,13 +210,15 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
           <section className="rounded-lg border border-cream-200 bg-cream-100/50 p-3 sm:hidden">
             <p className="text-xs font-semibold uppercase text-slate-500">Cách viết</p>
             <div className="mt-3">
-              <HanziStrokeWriter key={`inline-${token.text}`} text={token.text} compact />
+              <HanziStrokeWriter key={`inline-${displayWord}`} text={displayWord} compact />
             </div>
           </section>
 
           <section className="rounded-lg border border-cream-200 bg-cream-100/50 p-3">
             <p className="text-xs font-semibold uppercase text-slate-500">Câu gốc</p>
-            <p className="mt-1 break-words font-serif text-lg font-semibold leading-8 text-ink">{sourceSentence || "Không có câu gốc."}</p>
+            <p className="mt-1 break-words font-serif text-lg font-semibold leading-8 text-ink">
+              {sourceSentence ? convertChineseText(sourceSentence, script) : "Không có câu gốc."}
+            </p>
             {subtitleTranslation ? <p className="mt-2 break-words text-base leading-7 text-slate-700">{subtitleTranslation}</p> : null}
           </section>
         </div>

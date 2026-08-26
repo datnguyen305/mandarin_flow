@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { BookOpen, Home, Library, Palette, Search } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { type MouseEvent, useEffect, useState, useSyncExternalStore } from "react";
+import { HOME_VIDEOS_REFRESH_EVENT } from "@/lib/home-videos";
+import { scrollBelowAppHeader } from "@/lib/scroll";
 
 const THEME_KEY = "fluentmandarin:pastel-theme";
 const THEME_EVENT = "pastel-theme-updated";
@@ -25,6 +27,7 @@ const themes = [
 
 export function AppHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
   const visibleNavItems = navItems.filter((item) => !item.watchOnly || pathname === "/watch");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -39,21 +42,41 @@ export function AppHeader() {
     window.dispatchEvent(new CustomEvent(THEME_EVENT));
   }
 
+  function refreshHomeVideos(event: MouseEvent<HTMLAnchorElement>) {
+    if (pathname !== "/" || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    event.preventDefault();
+    window.dispatchEvent(new CustomEvent(HOME_VIDEOS_REFRESH_EVENT));
+    router.replace("/#videos", { scroll: false });
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById("videos");
+      if (target) {
+        scrollBelowAppHeader(target, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+      }
+    });
+  }
+
   return (
-    <header className="sticky top-0 z-30 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
-      <nav className="relative mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <Link href="/" className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-30 border-b border-cream-200 bg-cream-50/90 backdrop-blur" data-app-header>
+      <nav className="relative mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
+        <Link
+          aria-label="Làm mới video đề xuất"
+          className="flex min-w-0 shrink-0 items-center gap-3 text-left"
+          href="/#videos"
+          onClick={refreshHomeVideos}
+          title="Làm mới video đề xuất"
+        >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-700 font-serif text-lg font-bold text-cream-50 shadow-sm">
             汉
           </span>
-          <span className="min-w-0">
+          <span className="hidden min-w-0 sm:block">
             <span className="block truncate text-base font-bold leading-none text-brand-900">MandarinFlow</span>
             <span className="mt-1 block truncate text-xs font-medium text-slate-500">Học tiếng Trung qua video</span>
           </span>
         </Link>
 
         <div
-          className={`order-3 grid w-full gap-1 rounded-xl bg-cream-200/70 p-1 text-sm font-medium text-slate-600 sm:order-none sm:w-auto lg:absolute lg:left-1/2 lg:-translate-x-1/2 ${
+          className={`grid w-auto shrink-0 gap-1 rounded-xl bg-cream-200/70 p-1 text-sm font-medium text-slate-600 lg:absolute lg:left-1/2 lg:-translate-x-1/2 ${
             visibleNavItems.length === 4 ? "grid-cols-4" : "grid-cols-3"
           }`}
         >
@@ -63,14 +86,16 @@ export function AppHeader() {
             const active = item.watchOnly ? pathname === "/watch" : item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
+                aria-label={item.label}
                 className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 transition ${
                   active ? "bg-cream-50 font-semibold text-brand-800 shadow-sm" : "hover:bg-cream-100 hover:text-brand-700"
                 }`}
                 href={href}
                 key={item.label}
+                title={item.label}
               >
                 <Icon size={16} />
-                {item.label}
+                <span className="hidden md:inline">{item.label}</span>
               </Link>
             );
           })}

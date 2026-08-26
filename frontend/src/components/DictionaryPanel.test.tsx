@@ -28,6 +28,7 @@ const baseProps = {
   onSave: vi.fn(),
   saving: false,
   saveStatus: null,
+  script: "simplified" as const,
 };
 
 describe("DictionaryPanel", () => {
@@ -68,6 +69,21 @@ describe("DictionaryPanel", () => {
 
     expect(screen.getByText("phụ đề")).toBeTruthy();
     expect(screen.queryByText("Không thể tải thêm giải thích.")).toBeNull();
+  });
+
+  it("renders Chinese content using the selected subtitle script", () => {
+    render(
+      <DictionaryPanel
+        {...baseProps}
+        entry={{ word: "視頻", pinyin: "shìpín", meaning: "video" }}
+        subtitle={{ ...subtitle, text: "這個視頻很好。" }}
+        token={{ text: "視頻", pinyin: "shìpín", meaning: "video" }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "视频" })).toBeTruthy();
+    expect(screen.getByText("这个视频很好。" )).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "視頻" })).toBeNull();
   });
 });
 

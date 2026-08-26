@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef } from "react";
+import { scrollBelowAppHeader } from "@/lib/scroll";
 
 export function RouteScrollManager() {
   const pathname = usePathname();
@@ -22,7 +23,7 @@ export function RouteScrollManager() {
     const frame = window.requestAnimationFrame(() => {
       const anchor = document.querySelector<HTMLElement>("[data-route-scroll-anchor]");
       if (anchor) {
-        anchor.scrollIntoView({ behavior: shouldReduceMotion ? "auto" : "smooth", block: "start" });
+        scrollBelowAppHeader(anchor, shouldReduceMotion ? "auto" : "smooth");
         return;
       }
       window.scrollTo({ top: 0, behavior: shouldReduceMotion ? "auto" : "smooth" });

@@ -19,6 +19,8 @@ import {
   readLatestLearningProgress,
   type LearningProgressDetail,
 } from "@/lib/learningProgress";
+import { HOME_VIDEOS_REFRESH_EVENT } from "@/lib/home-videos";
+import { scrollBelowAppHeader } from "@/lib/scroll";
 
 const FEEDBACK_EMAIL = process.env.NEXT_PUBLIC_FEEDBACK_EMAIL ?? "";
 const LEARNING_STREAK_STORAGE_KEY = "mandarinflow:learning-streak";
@@ -106,6 +108,16 @@ function HomePageContent() {
     }
 
     loadHomeData();
+  }, []);
+
+  useEffect(() => {
+    function refreshRecommendedVideos() {
+      setQuery("");
+      setVideos((current) => shuffleVideos(current));
+    }
+
+    window.addEventListener(HOME_VIDEOS_REFRESH_EVENT, refreshRecommendedVideos);
+    return () => window.removeEventListener(HOME_VIDEOS_REFRESH_EVENT, refreshRecommendedVideos);
   }, []);
 
   useEffect(() => {
@@ -719,10 +731,7 @@ function HomeFeatureCard({ feature }: { feature: HomeFeature }) {
 
       event.preventDefault();
       window.history.replaceState(window.history.state, "", feature.href);
-      target.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
-      });
+      scrollBelowAppHeader(target, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
     };
 
     return (

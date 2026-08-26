@@ -21,7 +21,6 @@ declare global {
 const FLOATING_STYLE: CSSProperties = {
   bottom: 12,
   right: 12,
-  width: "min(360px, calc(100vw - 24px))",
 };
 
 export function FloatingVideoPlayer() {
@@ -201,7 +200,7 @@ export function FloatingVideoPlayer() {
   return (
     <aside
       aria-hidden={!visible}
-      className={`fixed z-40 overflow-hidden border border-cream-200 bg-black shadow-2xl ${
+      className={`fixed z-40 w-[280px] max-w-[calc(100vw-24px)] overflow-hidden border border-cream-200 bg-black shadow-2xl sm:w-[320px] ${
         dockedInWatch ? "transition-none" : "transition-[left,top,width,height,bottom,right] duration-300"
       } ${
         visible ? "" : "invisible pointer-events-none"
