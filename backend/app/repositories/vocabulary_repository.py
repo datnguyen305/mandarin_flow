@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -33,6 +33,17 @@ class VocabularyRepository:
         self.db.add(item)
         await self.db.flush()
         return item
+
+    async def find_for_guest_by_word(self, guest_id: uuid.UUID, word: str) -> SavedVocabulary | None:
+        result = await self.db.execute(
+            select(SavedVocabulary)
+            .where(
+                SavedVocabulary.guest_id == guest_id,
+                func.lower(func.trim(SavedVocabulary.word)) == word.strip().casefold(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def list_for_guest(self, guest_id: uuid.UUID) -> list[SavedVocabulary]:
         result = await self.db.execute(

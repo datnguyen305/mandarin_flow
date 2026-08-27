@@ -25,6 +25,8 @@ const themes = [
   { id: "lavender", label: "Lavender", color: "#e6e0f7" }
 ];
 
+const themeIds = new Set(themes.map((item) => item.id));
+
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -34,11 +36,12 @@ export function AppHeader() {
 
   useEffect(() => {
     applyTheme(theme);
-    window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   function handleThemeChange(themeId: string) {
+    if (!themeIds.has(themeId)) return;
     window.localStorage.setItem(THEME_KEY, themeId);
+    applyTheme(themeId);
     window.dispatchEvent(new CustomEvent(THEME_EVENT));
   }
 
@@ -57,7 +60,7 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-cream-200 bg-cream-50/90 backdrop-blur" data-app-header>
+    <header className="sticky top-0 z-50 border-b border-cream-200 bg-cream-50/90 backdrop-blur" data-app-header>
       <nav className="relative mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
         <Link
           aria-label="Làm mới video đề xuất"
@@ -102,7 +105,7 @@ export function AppHeader() {
         </div>
 
         <div className="ml-auto inline-flex items-center justify-end">
-          <div className="inline-flex items-center rounded-xl border border-cream-200 bg-cream-100/80 p-1 sm:p-1.5 shadow-sm">
+          <div className="relative inline-flex items-center rounded-xl border border-cream-200 bg-cream-100/80 p-1 shadow-sm sm:p-1.5">
             <button
               aria-expanded={paletteOpen}
               aria-label={paletteOpen ? "Thu gọn bảng màu" : "Mở bảng màu"}
@@ -115,22 +118,26 @@ export function AppHeader() {
             </button>
             <div
               aria-hidden={!paletteOpen}
-              className={`flex items-center gap-3 transition-all duration-300 ease-out ${
+              className={`absolute right-1 top-full z-40 mt-1 flex w-36 flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 p-1 shadow-lg transition-all duration-300 ease-out sm:static sm:z-auto sm:mt-0 sm:flex-row sm:items-center sm:gap-3 sm:w-auto sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none ${
                 paletteOpen
-                  ? "ml-1.5 max-w-64 overflow-visible scale-100 opacity-100"
-                  : "max-w-0 overflow-hidden scale-95 opacity-0 pointer-events-none"
+                  ? "pointer-events-auto max-h-64 translate-y-0 opacity-100 sm:ml-1.5 sm:max-h-none sm:max-w-64 sm:scale-100"
+                  : "pointer-events-none max-h-0 -translate-y-1 opacity-0 sm:max-h-none sm:max-w-0 sm:scale-95"
               }`}
             >
               {themes.map((item) => (
                 <button
                   aria-label={`Chọn màu ${item.label}`}
-                  className={`h-6 w-6 rounded-full border transition hover:scale-105 ${theme === item.id ? "border-brand-800 ring-2 ring-brand-200" : "border-cream-300"}`}
+                  className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs font-medium text-slate-700 transition hover:bg-cream-50 sm:h-6 sm:w-6 sm:rounded-full sm:px-0 sm:py-0 sm:hover:scale-105 ${
+                    theme === item.id ? "border-brand-800 ring-2 ring-brand-200" : "border-cream-300"
+                  } ${paletteOpen ? "" : "overflow-hidden"}`}
                   key={item.id}
                   onClick={() => handleThemeChange(item.id)}
-                  style={{ backgroundColor: item.color }}
                   title={item.label}
                   type="button"
-                />
+                >
+                  <span className="h-6 w-6 shrink-0 rounded-full border border-cream-300 sm:h-6 sm:w-6" style={{ backgroundColor: item.color }} />
+                  <span className="sm:hidden">{item.label}</span>
+                </button>
               ))}
             </div>
           </div>
@@ -160,7 +167,8 @@ function subscribeTheme(callback: () => void) {
 
 function getThemeSnapshot() {
   if (typeof window === "undefined") return "sage";
-  return window.localStorage.getItem(THEME_KEY) ?? "sage";
+  const storedTheme = window.localStorage.getItem(THEME_KEY);
+  return storedTheme && themeIds.has(storedTheme) ? storedTheme : "sage";
 }
 
 function getServerThemeSnapshot() {

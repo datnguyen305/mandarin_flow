@@ -299,7 +299,7 @@ function WatchContent() {
     if (!selectedToken || !sourceSubtitle?.id) return;
     setSaving(true);
     try {
-      await saveVocabulary({
+      const saveResult = await saveVocabulary({
         word: selectedToken.text,
         pinyin: dictionaryEntry?.pinyin ?? selectedToken.pinyin,
         meaning: dictionaryEntry?.meaning ?? selectedToken.meaning,
@@ -307,6 +307,10 @@ function WatchContent() {
         subtitle_id: sourceSubtitle.id,
         timestamp: sourceSubtitle.start
       });
+      if (saveResult.status === "already_saved") {
+        setSaveStatus("Từ này đã được lưu rồi");
+        return;
+      }
       const vocabularyItems = await listVocabulary();
       notifyLearningProgress(vocabularyItems.length, true, countWordsSavedToday(vocabularyItems));
       setSaveStatus("Đã lưu vào sổ từ vựng");

@@ -21,13 +21,18 @@ class VocabularyService:
         youtube_video_id: str,
         subtitle_id: int,
         timestamp: float,
-    ) -> int:
+    ) -> tuple[int, str]:
+        normalized_word = word.strip()
+        existing = await self.repo.find_for_guest_by_word(guest_id, normalized_word)
+        if existing is not None:
+            return existing.id, "already_saved"
+
         video, subtitle = await self.repo.find_video_and_subtitle(youtube_video_id, subtitle_id)
         if video is None or subtitle is None or subtitle.video_id != video.id:
             raise AppError("Video or subtitle not found")
-        item = await self.repo.save(guest_id, word, pinyin, meaning, video.id, subtitle.id, timestamp)
+        item = await self.repo.save(guest_id, normalized_word, pinyin, meaning, video.id, subtitle.id, timestamp)
         await self.db.commit()
-        return item.id
+        return item.id, "saved"
 
     async def list_for_guest(self, guest_id: uuid.UUID) -> list[SavedVocabularyResponse]:
         items = await self.repo.list_for_guest(guest_id)

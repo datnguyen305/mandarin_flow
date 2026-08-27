@@ -17,7 +17,7 @@ async def save_vocabulary(
     guest: GuestSession = Depends(get_or_create_guest),
 ) -> SaveVocabularyResponse:
     service = VocabularyService(db)
-    vocabulary_id = await service.save(
+    vocabulary_id, save_status = await service.save(
         guest_id=guest.id,
         word=payload.word,
         pinyin=payload.pinyin,
@@ -26,7 +26,7 @@ async def save_vocabulary(
         subtitle_id=payload.subtitle_id,
         timestamp=payload.timestamp,
     )
-    return SaveVocabularyResponse(id=vocabulary_id, status="saved")
+    return SaveVocabularyResponse(id=vocabulary_id, status=save_status)
 
 
 @router.get("", response_model=list[SavedVocabularyResponse])
