@@ -564,12 +564,6 @@ function WatchContent() {
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t border-cream-200 bg-cream-100/70 p-3">
-          <div className="flex items-center justify-between text-sm text-slate-500">
-            <span>Dòng phụ đề</span>
-            <strong className="text-brand-800">{subtitles.length}</strong>
-          </div>
-        </div>
         </aside>
       </section>
       <div className="pointer-events-none absolute inset-x-3 bottom-2 top-2 z-20 hidden lg:block">

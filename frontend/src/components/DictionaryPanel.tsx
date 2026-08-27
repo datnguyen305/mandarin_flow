@@ -89,11 +89,12 @@ export function DictionaryPanel({ anchorRef, token, entry, loading, error, subti
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-30 flex w-full flex-col overflow-hidden border-l border-cream-200 bg-cream-50 shadow-2xl sm:bottom-[var(--dictionary-bottom)] sm:top-[var(--dictionary-top)] sm:w-[var(--dictionary-width)] sm:max-w-[70vw] sm:rounded-l-xl sm:border-y"
+      className="fixed inset-y-0 right-0 z-30 flex min-h-0 w-full flex-col overflow-hidden border-l border-cream-200 bg-cream-50 shadow-2xl sm:bottom-auto sm:top-[var(--dictionary-top)] sm:h-[var(--dictionary-height)] sm:w-[var(--dictionary-width)] sm:max-w-[70vw] sm:rounded-l-xl sm:border-y"
       style={{
         "--dictionary-width": `${panelWidth}px`,
         "--dictionary-top": `${verticalBounds.top}px`,
         "--dictionary-bottom": `${verticalBounds.bottom}px`,
+        "--dictionary-height": `calc(100dvh - ${verticalBounds.top}px - ${verticalBounds.bottom}px)`,
       } as CSSProperties}
     >
       <div
