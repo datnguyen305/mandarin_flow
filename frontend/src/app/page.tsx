@@ -10,7 +10,6 @@ import { listVideoProgress, listVideos, listVocabulary } from "@/lib/api";
 import { ALL_VIDEO_TAGS, filterVideos, formatVideoDuration, getVideoTags, paginateVideos, parseVideoPage, videoCatalogUrl } from "@/lib/videoCatalog";
 import { getPreferredYouTubeThumbnail } from "@/lib/youtubeThumbnail";
 import type { ImportedVideo, SavedVocabulary, VideoProgress } from "@/types";
-import { ImportChatbot } from "@/components/ImportChatbot";
 import { buildWeeklyLearningActivity, DailyLearningStats, type WeeklyLearningDay } from "@/components/DailyLearningStats";
 import {
   LEARNING_PROGRESS_EVENT,
@@ -602,7 +601,6 @@ function HomePageContent() {
       <footer className="border-t border-cream-200/70 py-4 text-center text-xs text-slate-400">
         MandarinFlow © 2026 - Công cụ học tiếng Trung qua video thông minh
       </footer>
-      <ImportChatbot />
     </main>
   );
 }

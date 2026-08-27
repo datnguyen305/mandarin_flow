@@ -19,6 +19,12 @@ type Config struct {
 	GuestSessionDays int
 	DevAccessToken   string
 	CookiesFile      string
+	ChatbotEnabled   bool
+	RateLimitEnabled bool
+	ReadLimit        int
+	WriteLimit       int
+	ExpensiveLimit   int
+	AdminLimit       int
 }
 
 func Load() (Config, error) {
@@ -43,6 +49,12 @@ func Load() (Config, error) {
 		GuestSessionDays: guestDays,
 		DevAccessToken:   os.Getenv("DEV_ACCESS_TOKEN"),
 		CookiesFile:      envOrDefault("YT_DLP_COOKIES_FILE", "/app/cookies/cookies.txt"),
+		ChatbotEnabled:   boolEnvOrDefault("CHATBOT_ENABLED", true),
+		RateLimitEnabled: boolEnvOrDefault("RATE_LIMIT_ENABLED", true),
+		ReadLimit:        intEnvOrDefault("RATE_LIMIT_READ_PER_MINUTE", 120),
+		WriteLimit:       intEnvOrDefault("RATE_LIMIT_WRITE_PER_MINUTE", 30),
+		ExpensiveLimit:   intEnvOrDefault("RATE_LIMIT_EXPENSIVE_PER_WINDOW", 5),
+		AdminLimit:       intEnvOrDefault("RATE_LIMIT_ADMIN_PER_MINUTE", 10),
 	}, nil
 }
 
@@ -55,4 +67,20 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func boolEnvOrDefault(name string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	if value == "" {
+		return fallback
+	}
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func intEnvOrDefault(name string, fallback int) int {
+	value, err := strconv.Atoi(os.Getenv(name))
+	if err != nil || value < 1 {
+		return fallback
+	}
+	return value
 }

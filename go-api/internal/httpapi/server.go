@@ -37,7 +37,8 @@ func newHandler(cfg config.Config, logger *slog.Logger, deps Dependencies, trans
 	}
 	mux.Handle("/api/", proxy)
 
-	return recoverer(logger)(requestID(requestLogger(logger)(cors(cfg.FrontendURL)(mux))))
+	limited := rateLimitMiddleware(cfg, deps.Redis, mux)
+	return recoverer(logger)(requestID(requestLogger(logger)(cors(cfg.FrontendURL)(limited))))
 }
 
 func newLegacyProxy(target *url.URL, logger *slog.Logger) *httputil.ReverseProxy {
