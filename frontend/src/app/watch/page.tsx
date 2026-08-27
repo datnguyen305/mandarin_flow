@@ -56,7 +56,6 @@ function WatchContent() {
   const lastPlaybackPostRef = useRef({ time: -1, sentAt: 0 });
   const transcriptItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const transcriptPanelRef = useRef<HTMLDivElement | null>(null);
-  const sidebarPanelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const savedScript = window.localStorage.getItem(SUBTITLE_SCRIPT_KEY);
@@ -335,7 +334,7 @@ function WatchContent() {
       } as CSSProperties}
     >
       <section
-        className="relative grid min-h-0 grid-rows-[minmax(0,var(--watch-video-height))_minmax(0,1fr)] gap-3 overflow-hidden lg:gap-2"
+        className="relative grid h-full max-h-full min-h-0 grid-rows-[minmax(0,var(--watch-video-height))_minmax(0,1fr)] gap-3 overflow-hidden lg:gap-2"
         ref={leftColumnRef}
       >
         <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-lg">
@@ -379,7 +378,7 @@ function WatchContent() {
             </div>
           </div>
         </div>
-        <div className="relative flex min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 p-3 text-center shadow-sm">
+        <div className="relative flex h-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 p-3 text-center shadow-sm">
             <div className="mb-3 flex shrink-0 items-center justify-between">
             <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-700">
               <span className="h-2 w-2 rounded-full bg-brand-500" />
@@ -495,8 +494,8 @@ function WatchContent() {
         </div>
       </section>
 
-      <section className="hidden min-h-0 overflow-hidden md:block">
-        <aside className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-sm" ref={sidebarPanelRef}>
+      <section className="hidden h-full max-h-full min-h-0 overflow-hidden md:block">
+        <aside className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-cream-50 shadow-sm">
         <div className="shrink-0 border-b border-cream-200 bg-cream-100/70 p-2">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-cream-200/70 p-1 text-sm">
             <button
@@ -605,7 +604,7 @@ function WatchContent() {
             script={subtitleScript}
             token={selectedToken}
           />
-          <div className="hidden md:block">
+          <div className="hidden md:contents">
             <DictionaryPanel
               token={selectedToken}
               entry={dictionaryEntry}
@@ -621,7 +620,7 @@ function WatchContent() {
               onSave={handleSave}
               saveStatus={saveStatus}
               script={subtitleScript}
-              anchorRef={sidebarPanelRef}
+              anchorRef={workspaceRef}
             />
           </div>
         </>
